@@ -1,0 +1,248 @@
+<style>
+  /* ===== 基本樣式：黑底白字終端機風格 ===== */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: #000;
+    color: #e8e8e8;
+    font-family: "Courier New", "Noto Sans Mono CJK TC", "Microsoft JhengHei", monospace;
+    font-size: 16px;
+    line-height: 1.6;
+    display: flex;
+    justify-content: center;
+  }
+  #game {
+    width: 100%;
+    max-width: 760px;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    gap: 12px;
+  }
+
+  /* ===== 狀態列 ===== */
+  #status {
+    border: 1px solid #e8e8e8;
+    padding: 10px 14px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 20px;
+  }
+  #status .title { grid-column: 1 / -1; font-weight: bold; letter-spacing: 2px; }
+  #status .full { grid-column: 1 / -1; }
+  .dim { color: #8a8a8a; }
+
+  /* ===== 主文字顯示區 ===== */
+  #log {
+    flex: 1;
+    border: 1px solid #555;
+    padding: 12px 14px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  #log p { margin-bottom: 4px; }
+  #log .sep { color: #555; margin: 8px 0; }
+  #log .hit { color: #fff; }
+  #log .hurt { color: #bbb; }
+  #log .big { font-weight: bold; color: #fff; }
+
+  /* ===== 按鈕選項區 ===== */
+  #choices {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  #choices button {
+    background: #000;
+    color: #e8e8e8;
+    border: 1px solid #e8e8e8;
+    font-family: inherit;
+    font-size: 16px;
+    padding: 12px 14px;
+    text-align: left;
+    cursor: pointer;
+  }
+  #choices button:hover,
+  #choices button:focus-visible { background: #e8e8e8; color: #000; outline: none; }
+
+  /* 名字上色；按鈕反白時改回黑字，避免看不清 */
+  .name-boss { font-weight: bold; }
+  #choices button:hover .name, #choices button:focus-visible .name,
+  .menu button:hover .name { color: inherit !important; }
+
+  @media (max-width: 480px) {
+    body { font-size: 15px; }
+    #game { padding: 10px; gap: 8px; }
+    #status { gap: 0 12px; padding: 8px 10px; }
+  }
+
+  /* ===== 標題畫面 / 遊戲介紹畫面 ===== */
+  .screen {
+    width: 100%;
+    max-width: 760px;
+    height: 100vh;
+    height: 100dvh;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .hidden { display: none !important; }
+  #title-screen { justify-content: center; align-items: center; text-align: center; }
+  #title-screen .logo {
+    font-size: 40px; font-weight: bold; letter-spacing: 8px;
+    border: 1px solid #e8e8e8; padding: 18px 28px;
+  }
+  #title-screen .sub { color: #8a8a8a; }
+  #title-screen .cursor { animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .menu { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 320px; margin-top: 12px; }
+  .menu button, #intro-screen .menu button {
+    background: #000; color: #e8e8e8; border: 1px solid #e8e8e8;
+    font-family: inherit; font-size: 18px; padding: 14px; cursor: pointer;
+  }
+  .menu button:hover, .menu button:focus-visible { background: #e8e8e8; color: #000; outline: none; }
+  #intro-screen .box { flex: 1; overflow-y: auto; border: 1px solid #555; padding: 14px 16px; }
+  #intro-screen h2 { font-size: 18px; margin: 4px 0 8px; letter-spacing: 2px; }
+  #intro-screen h2:not(:first-child) { margin-top: 18px; }
+  #intro-screen p, #intro-screen li { margin-bottom: 6px; }
+  #intro-screen ul { padding-left: 1.4em; }
+  #intro-screen .menu { flex-direction: row; max-width: none; margin-top: 0; }
+  #intro-screen .menu button { flex: 1; }
+
+  /* ===== 擲骰動畫 ===== */
+  #dice {
+    position: fixed; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.6); opacity: 0; pointer-events: none; transition: opacity 120ms ease;
+  }
+  #dice.show { opacity: 1; pointer-events: all; }
+  #dice .dice-box {
+    background: #000; border: 1px solid #e8e8e8; padding: 18px 28px; text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 240px; max-width: 90vw;
+  }
+  #dice .who { font-weight: bold; font-size: 18px; letter-spacing: 1px; }
+  #dice .face {
+    width: 84px; height: 84px; border: 2px solid #e8e8e8; display: flex; align-items: center; justify-content: center;
+    font-size: 40px; font-weight: bold; color: #fff;
+  }
+  #dice .face.rolling { animation: shake 200ms linear infinite; }
+  #dice .face.landed { animation: land 400ms ease-out; }
+  #dice .note { color: #8a8a8a; font-size: 14px; }
+  @keyframes shake {
+    0% { transform: rotate(-12deg) translate(-2px, 1px); }
+    50% { transform: rotate(10deg) translate(2px, -1px); }
+    100% { transform: rotate(-12deg) translate(-2px, 1px); }
+  }
+  @keyframes land { 0% { transform: scale(1.35); } 100% { transform: scale(1); } }
+
+  /* ===== 勇者揮劍 ===== */
+  #sword {
+    position: fixed; inset: 0; z-index: 6; pointer-events: none; display: none;
+    align-items: center; justify-content: center;
+  }
+  #sword.show { display: flex; }
+  #sword .blade {
+    position: absolute; transform-origin: 50% 95%;
+    filter: drop-shadow(0 0 6px #ffffff);
+  }
+  #sword.show .blade { animation: swing var(--sword-ms, 650ms) cubic-bezier(.3,.0,.2,1) forwards; }
+  #sword .slash {
+    position: absolute; width: 260px; height: 260px; border-radius: 50%;
+    border-top: 4px solid rgba(255,255,255,0.9); opacity: 0; transform: rotate(-40deg);
+  }
+  #sword.show .slash { animation: slash var(--sword-ms, 650ms) ease-out forwards; }
+  @keyframes swing {
+    0%   { transform: translateY(-40px) rotate(-75deg); opacity: 0; }
+    20%  { opacity: 1; }
+    60%  { transform: translateY(-40px) rotate(75deg); opacity: 1; }
+    100% { transform: translateY(-40px) rotate(80deg); opacity: 0; }
+  }
+  @keyframes slash {
+    0%, 30% { opacity: 0; transform: rotate(-60deg); }
+    55% { opacity: 1; }
+    100% { opacity: 0; transform: rotate(40deg); }
+  }
+
+  /* ===== 受到攻擊：金光（無傷）／搖動＋紅光（受傷） ===== */
+  #log.glow-gold { animation: glowGold var(--hit-ms, 500ms) ease-out; }
+  #log.glow-red  { animation: glowRed  var(--hit-ms, 500ms) ease-out; }
+  @keyframes glowGold {
+    0%   { box-shadow: 0 0 0 0 transparent; border-color: #555; }
+    35%  { box-shadow: 0 0 18px 4px var(--gold, #ffd23f), inset 0 0 12px var(--gold, #ffd23f); border-color: var(--gold, #ffd23f); }
+    100% { box-shadow: 0 0 0 0 transparent; border-color: #555; }
+  }
+  @keyframes glowRed {
+    0%   { box-shadow: 0 0 0 0 transparent; border-color: #555; }
+    35%  { box-shadow: 0 0 18px 4px var(--red, #ff2b2b), inset 0 0 12px var(--red, #ff2b2b); border-color: var(--red, #ff2b2b); }
+    100% { box-shadow: 0 0 0 0 transparent; border-color: #555; }
+  }
+  #game.shake { animation: shakeScreen var(--hit-ms, 500ms) linear; }
+  @keyframes shakeScreen {
+    0%, 100% { transform: translate(0, 0); }
+    10% { transform: translate(-8px, 3px); }
+    20% { transform: translate(7px, -4px); }
+    30% { transform: translate(-6px, 4px); }
+    40% { transform: translate(6px, -2px); }
+    50% { transform: translate(-4px, 3px); }
+    60% { transform: translate(4px, -2px); }
+    70% { transform: translate(-3px, 1px); }
+    80% { transform: translate(2px, -1px); }
+    90% { transform: translate(-1px, 0); }
+  }
+
+  /* ===== 魔王出現動畫 ===== */
+  #boss-appear {
+    position: fixed; inset: 0; z-index: 7; pointer-events: none; display: none;
+    align-items: center; justify-content: center; background: rgba(0,0,0,0.5);
+  }
+  #boss-appear.show { display: flex; }
+  #boss-appear img {
+    width: min(60vw, 300px); height: auto;
+    filter: drop-shadow(0 0 18px rgba(255,0,0,0.7));
+  }
+  #boss-appear.show img { animation: bossAppear var(--boss-ms, 1800ms) ease-out forwards; }
+  @keyframes bossAppear {
+    0%   { transform: scale(var(--boss-from, 0.2)); opacity: 1; }
+    100% { transform: scale(var(--boss-to, 1.8));   opacity: 0; }
+  }
+
+  /* ===== 劇情文字動畫 ===== */
+  #story {
+    position: fixed; inset: 0; z-index: 8; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(0,0,0,0); pointer-events: all;
+  }
+  #story.show { display: flex; }
+  #story .text {
+    font-size: 30px; font-weight: bold; letter-spacing: 6px; color: #fff;
+    text-align: center; padding: 0 16px; opacity: 0;
+    text-shadow: 0 0 12px rgba(255,255,255,0.35);
+  }
+  @media (max-width: 480px) { #story .text { font-size: 24px; letter-spacing: 4px; } }
+
+  /* ===== 轉場動畫：畫面淡出 → 掃描線掃過 → 新畫面淡入 ===== */
+  #fade {
+    position: fixed; inset: 0; background: #000; pointer-events: none;
+    opacity: 0; transition: opacity var(--fade-ms, 300ms) ease;
+    z-index: 10;
+  }
+  #fade.on { opacity: 1; pointer-events: all; }
+  #fade .scan {
+    position: absolute; left: 0; right: 0; height: 2px; top: -4px;
+    background: #e8e8e8; box-shadow: 0 0 12px #e8e8e8; opacity: 0;
+  }
+  #fade.on .scan { animation: scan var(--scan-ms, 400ms) linear forwards; }
+  @keyframes scan { 0% { top: 0; opacity: 1; } 100% { top: 100%; opacity: 0.2; } }
+  .enter { animation: enter var(--fade-ms, 300ms) ease-out; }
+  @keyframes enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    #fade.on .scan, .enter, #title-screen .cursor, #dice .face, #sword .blade, #sword .slash, #game.shake, #boss-appear img { animation: none !important; }
+  }
+
+  @media (max-width: 480px) {
+    #title-screen .logo { font-size: 30px; letter-spacing: 5px; padding: 14px 18px; }
+    .screen { padding: 10px; }
+  }
