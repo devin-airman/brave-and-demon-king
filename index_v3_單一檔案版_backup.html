@@ -1,0 +1,1327 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>勇者與魔王</title>
+<style>
+/* ===== 基本樣式：黑底白字終端機風格 ===== */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: #000;
+  color: #e8e8e8;
+  font-family: "Courier New", "Noto Sans Mono CJK TC", "Microsoft JhengHei", monospace;
+  font-size: 16px;
+  line-height: 1.6;
+  display: flex;
+  justify-content: center;
+}
+#game {
+  width: 100%;
+  max-width: 760px;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 12px;
+}
+
+/* ===== 狀態列 ===== */
+#status {
+  border: 1px solid #e8e8e8;
+  padding: 10px 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 20px;
+}
+#status .title { grid-column: 1 / -1; font-weight: bold; letter-spacing: 2px; }
+#status .full { grid-column: 1 / -1; }
+#status .enemy-bar {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px dashed #555;
+  color: #f0d0d0;
+}
+.dim { color: #8a8a8a; }
+
+/* ===== 主文字顯示區 ===== */
+#log {
+  flex: 1;
+  border: 1px solid #555;
+  padding: 12px 14px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+#log p { margin-bottom: 4px; }
+#log .sep { color: #555; margin: 8px 0; }
+#log .hit { color: #fff; }
+#log .hurt { color: #bbb; }
+#log .big { font-weight: bold; color: #fff; }
+#log .text-curse { color: #c792ea; font-weight: bold; }
+
+/* ===== 按鈕選項區 ===== */
+#choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#choices button {
+  background: #000;
+  color: #e8e8e8;
+  border: 1px solid #e8e8e8;
+  font-family: inherit;
+  font-size: 16px;
+  padding: 12px 14px;
+  text-align: left;
+  cursor: pointer;
+}
+#choices button:hover,
+#choices button:focus-visible { background: #e8e8e8; color: #000; outline: none; }
+
+/* 名字上色；按鈕反白時改回黑字，避免看不清 */
+.name-boss { font-weight: bold; }
+#choices button:hover .name, #choices button:focus-visible .name,
+.menu button:hover .name { color: inherit !important; }
+
+@media (max-width: 480px) {
+  body { font-size: 15px; }
+  #game { padding: 10px; gap: 8px; }
+  #status { gap: 0 12px; padding: 8px 10px; font-size: 14px; }
+}
+
+/* ===== 標題畫面 / 遊戲介紹畫面 ===== */
+.screen {
+  width: 100%;
+  max-width: 760px;
+  height: 100vh;
+  height: 100dvh;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.hidden { display: none !important; }
+#title-screen { justify-content: center; align-items: center; text-align: center; }
+#title-screen .logo {
+  font-size: 40px; font-weight: bold; letter-spacing: 8px;
+  border: 1px solid #e8e8e8; padding: 18px 28px;
+}
+#title-screen .sub { color: #8a8a8a; }
+#title-screen .cursor { animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.menu { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 320px; margin-top: 12px; }
+.menu button, #intro-screen .menu button {
+  background: #000; color: #e8e8e8; border: 1px solid #e8e8e8;
+  font-family: inherit; font-size: 18px; padding: 14px; cursor: pointer;
+}
+.menu button:hover, .menu button:focus-visible { background: #e8e8e8; color: #000; outline: none; }
+#intro-screen .box { flex: 1; overflow-y: auto; border: 1px solid #555; padding: 14px 16px; }
+#intro-screen h2 { font-size: 18px; margin: 4px 0 8px; letter-spacing: 2px; }
+#intro-screen h2:not(:first-child) { margin-top: 18px; }
+#intro-screen p, #intro-screen li { margin-bottom: 6px; }
+#intro-screen ul { padding-left: 1.4em; }
+#intro-screen .menu { flex-direction: row; max-width: none; margin-top: 0; }
+#intro-screen .menu button { flex: 1; }
+
+/* ===== 擲骰動畫 ===== */
+#dice {
+  position: fixed; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.6); opacity: 0; pointer-events: none; transition: opacity 120ms ease;
+}
+#dice.show { opacity: 1; pointer-events: all; }
+#dice .dice-box {
+  background: #000; border: 1px solid #e8e8e8; padding: 18px 28px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 240px; max-width: 90vw;
+}
+#dice .who { font-weight: bold; font-size: 18px; letter-spacing: 1px; }
+#dice .face {
+  width: 84px; height: 84px; border: 2px solid #e8e8e8; display: flex; align-items: center; justify-content: center;
+  font-size: 40px; font-weight: bold; color: #fff;
+}
+#dice .face.rolling { animation: shake 200ms linear infinite; }
+#dice .face.landed { animation: land 400ms ease-out; }
+#dice .note { color: #8a8a8a; font-size: 14px; }
+@keyframes shake {
+  0% { transform: rotate(-12deg) translate(-2px, 1px); }
+  50% { transform: rotate(10deg) translate(2px, -1px); }
+  100% { transform: rotate(-12deg) translate(-2px, 1px); }
+}
+@keyframes land { 0% { transform: scale(1.35); } 100% { transform: scale(1); } }
+
+/* ===== 勇者揮劍 ===== */
+#sword {
+  position: fixed; inset: 0; z-index: 6; pointer-events: none; display: none;
+  align-items: center; justify-content: center;
+}
+#sword.show { display: flex; }
+#sword .blade {
+  position: absolute; transform-origin: 50% 95%;
+  filter: drop-shadow(0 0 6px #ffffff);
+}
+#sword.show .blade { animation: swing var(--sword-ms, 650ms) cubic-bezier(.3,.0,.2,1) forwards; }
+#sword .slash {
+  position: absolute; width: 260px; height: 260px; border-radius: 50%;
+  border-top: 4px solid rgba(255,255,255,0.9); opacity: 0; transform: rotate(-40deg);
+}
+#sword.show .slash { animation: slash var(--sword-ms, 650ms) ease-out forwards; }
+@keyframes swing {
+  0% { transform: translateY(-40px) rotate(-75deg); opacity: 0; }
+  20% { opacity: 1; }
+  60% { transform: translateY(-40px) rotate(75deg); opacity: 1; }
+  100% { transform: translateY(-40px) rotate(80deg); opacity: 0; }
+}
+@keyframes slash {
+  0%, 30% { opacity: 0; transform: rotate(-60deg); }
+  55% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(40deg); }
+}
+
+/* ===== 受到攻擊：金光（無傷）／搖動＋紅光（受傷） ===== */
+#log.glow-gold { animation: glowGold var(--hit-ms, 500ms) ease-out; }
+#log.glow-red { animation: glowRed var(--hit-ms, 500ms) ease-out; }
+@keyframes glowGold {
+  0% { box-shadow: 0 0 0 0 transparent; border-color: #555; }
+  35% { box-shadow: 0 0 18px 4px var(--gold, #ffd23f), inset 0 0 12px var(--gold, #ffd23f); border-color: var(--gold, #ffd23f); }
+  100% { box-shadow: 0 0 0 0 transparent; border-color: #555; }
+}
+@keyframes glowRed {
+  0% { box-shadow: 0 0 0 0 transparent; border-color: #555; }
+  35% { box-shadow: 0 0 18px 4px var(--red, #ff2b2b), inset 0 0 12px var(--red, #ff2b2b); border-color: var(--red, #ff2b2b); }
+  100% { box-shadow: 0 0 0 0 transparent; border-color: #555; }
+}
+#game.shake { animation: shakeScreen var(--hit-ms, 500ms) linear; }
+@keyframes shakeScreen {
+  0%, 100% { transform: translate(0, 0); }
+  10% { transform: translate(-8px, 3px); }
+  20% { transform: translate(7px, -4px); }
+  30% { transform: translate(-6px, 4px); }
+  40% { transform: translate(6px, -2px); }
+  50% { transform: translate(-4px, 3px); }
+  60% { transform: translate(4px, -2px); }
+  70% { transform: translate(-3px, 1px); }
+  80% { transform: translate(2px, -1px); }
+  90% { transform: translate(-1px, 0); }
+}
+
+/* ===== 魔王出現動畫 ===== */
+#boss-appear {
+  position: fixed; inset: 0; z-index: 7; pointer-events: none; display: none;
+  align-items: center; justify-content: center; background: rgba(0,0,0,0.5);
+}
+#boss-appear.show { display: flex; }
+#boss-appear img {
+  width: min(60vw, 300px); height: auto;
+  filter: drop-shadow(0 0 18px rgba(255,0,0,0.7));
+}
+#boss-appear.show img { animation: bossAppear var(--boss-ms, 1800ms) ease-out forwards; }
+@keyframes bossAppear {
+  0% { transform: scale(var(--boss-from, 0.2)); opacity: 1; }
+  100% { transform: scale(var(--boss-to, 1.8)); opacity: 0; }
+}
+
+/* ===== 劇情文字動畫 ===== */
+#story {
+  position: fixed; inset: 0; z-index: 8; display: none;
+  align-items: center; justify-content: center;
+  background: rgba(0,0,0,0); pointer-events: all;
+}
+#story.show { display: flex; }
+#story .text {
+  font-size: 30px; font-weight: bold; letter-spacing: 6px; color: #fff;
+  text-align: center; padding: 0 16px; opacity: 0;
+  text-shadow: 0 0 12px rgba(255,255,255,0.35);
+}
+@media (max-width: 480px) { #story .text { font-size: 24px; letter-spacing: 4px; } }
+
+/* ===== 轉場動畫：畫面淡出 → 掃描線掃過 → 新畫面淡入 ===== */
+#fade {
+  position: fixed; inset: 0; background: #000; pointer-events: none;
+  opacity: 0; transition: opacity var(--fade-ms, 300ms) ease;
+  z-index: 10;
+}
+#fade.on { opacity: 1; pointer-events: all; }
+#fade .scan {
+  position: absolute; left: 0; right: 0; height: 2px; top: -4px;
+  background: #e8e8e8; box-shadow: 0 0 12px #e8e8e8; opacity: 0;
+}
+#fade.on .scan { animation: scan var(--scan-ms, 400ms) linear forwards; }
+@keyframes scan { 0% { top: 0; opacity: 1; } 100% { top: 100%; opacity: 0.2; } }
+.enter { animation: enter var(--fade-ms, 300ms) ease-out; }
+@keyframes enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  #fade.on .scan, .enter, #title-screen .cursor, #dice .face, #sword .blade, #sword .slash, #game.shake, #boss-appear img { animation: none !important; }
+}
+
+@media (max-width: 480px) {
+  #title-screen .logo { font-size: 30px; letter-spacing: 5px; padding: 14px 18px; }
+  .screen { padding: 10px; }
+}
+
+</style>
+</head>
+<body>
+<!-- 標題畫面 -->
+<div id="title-screen" class="screen">
+  <div class="logo" id="title-logo"></div>
+  <div class="sub" id="title-sub"></div>
+  <div class="sub"><span class="cursor">▌</span></div>
+  <div class="menu">
+    <button id="btn-start">開始遊戲</button>
+    <button id="btn-intro">遊戲介紹</button>
+  </div>
+</div>
+
+<!-- 遊戲介紹畫面 -->
+<div id="intro-screen" class="screen hidden">
+  <div class="box" id="intro-box"></div>
+  <div class="menu">
+    <button id="btn-back">返回</button>
+    <button id="btn-intro-start">開始遊戲</button>
+  </div>
+</div>
+
+<!-- 擲骰動畫 -->
+<div id="dice" aria-live="polite">
+  <div class="dice-box">
+    <div class="who"></div>
+    <div class="face">0</div>
+    <div class="note"></div>
+  </div>
+</div>
+
+<!-- 勇者揮劍動畫 -->
+<div id="sword" aria-hidden="true">
+  <div class="slash"></div>
+  <svg class="blade" viewBox="0 0 40 200" width="40" height="200">
+    <polygon points="20,0 28,18 28,140 12,140 12,18" fill="#e8e8e8" stroke="#ffffff" stroke-width="1"/>
+    <line x1="20" y1="12" x2="20" y2="136" stroke="#9a9a9a" stroke-width="2"/>
+    <rect x="0" y="140" width="40" height="8" fill="#4da6ff"/>
+    <rect x="15" y="148" width="10" height="38" fill="#8a6a3a"/>
+    <circle cx="20" cy="192" r="7" fill="#4da6ff"/>
+  </svg>
+</div>
+
+<!-- 魔王出現動畫（頭像圖片直接嵌在檔案裡，保持單一 index.html） -->
+<div id="boss-appear" aria-hidden="true">
+  <img alt="" src="data:image/webp;base64,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">
+</div>
+
+<!-- 劇情文字動畫 -->
+<div id="story" aria-live="polite"><div class="text"></div></div>
+
+<!-- 轉場用的黑幕 -->
+<div id="fade"><div class="scan"></div></div>
+
+<div id="game" class="hidden">
+  <div id="status"></div>
+  <div id="log" aria-live="polite"></div>
+  <div id="choices"></div>
+</div>
+
+<script>
+/* =========================================================
+   遊戲設定（集中管理常數、初始數值、顏色與動畫時間）
+   樓層、怪物與裝備詳細資料請見 data.js
+   ========================================================= */
+
+// 名字顏色：勇者藍色；物理怪黃色、魔法怪紅色、渾沌怪橙色（1層最淺→5層最深）；魔王深橙色粗體
+const HERO_COLOR = "#4da6ff";
+const ENEMY_COLORS = {
+  // 物理怪（黃色系：1 層最淺 → 5 層最深）
+  "墨染史萊姆": "#fff9a6",   // 第 1 層
+  "蝕刻穴居人": "#fff066",   // 第 2 層
+  "亂碼骸骨死士": "#ffe033", // 第 3 層
+  "淵面行刑者": "#ffcc00",   // 第 4 層
+  "原典禁衛巨兵": "#d4a000", // 第 5 層
+  // 魔法怪（紅色系：1 層最淺 → 5 層最深）
+  "漂浮符文妖": "#ff9999",   // 第 1 層
+  "洞窟秘術咒靈": "#ff6666", // 第 2 層
+  "哀號字節幽魂": "#ff3333", // 第 3 層
+  "斷章星象術士": "#cc1111", // 第 4 層
+  "王座吟唱主教": "#990000", // 第 5 層
+  // 渾沌怪（橙色系：1 層最淺 → 5 層最深）
+  "墨痕聚合體": "#ffcc99",   // 第 1 層
+  "裂隙蝕骨獸": "#ffad66",   // 第 2 層
+  "亂碼編譯魔像": "#ff8c33", // 第 3 層
+  "虛空斷章巨靈": "#f06b00", // 第 4 層
+  "文字同化核心": "#c85000", // 第 5 層
+  // 終局魔王（深橙色）
+  "文字魔王": "#9a3400",
+};
+
+// 勇者初始數值（生命 20、物攻 8、魔攻 8、物防 8、魔防 8、護盾 0）
+const HERO_BASE = {
+  hp: 20,
+  physAtk: 8,
+  magAtk: 8,
+  physDef: 8,
+  magDef: 8,
+  shield: 0,
+};
+
+// 爬塔與跨層成長設定
+const MAX_FLOOR = 5;          // 總層數（1–5 層）
+const ROUNDS_PER_FLOOR = 6;   // 每層固定 6 回合（第 1–5 回合抽取庫，第 6 回合傳送門+寶箱／魔王戰）
+const FLOOR_HP_BONUS = 15;    // 每過一層勇者最大生命 +15，並回復 15 點生命
+
+// 每層抽取庫（第 1–5 回合）設定：
+// 4 張固定牌：2 張打鬥 (monster)、1 張回復 (camp)、1 張技能牌（暫以回復牌 skill_camp 代替）
+// 第 5 張隨機牌：從 ["monster", "camp", "skill_camp"] 中隨機抽 1 張
+const FIXED_FLOOR_CARDS = ["monster", "monster", "camp", "skill_camp"];
+const RANDOM_FIFTH_POOL = ["monster", "camp", "skill_camp"];
+
+// 裝備部位名稱（4 格裝備欄：物理武器、魔法武器、雙防裝甲、護盾）
+const SLOT_NAME = {
+  physWeapon: "物理武器",
+  magWeapon: "魔法武器",
+  armor: "裝甲",
+  shield: "盾牌",
+};
+
+// 標題畫面文字
+const TITLE_TEXT = "勇者與魔王";
+const TITLE_SUB = "一款純文字冒險 RPG";
+
+// 遊戲介紹文字（已同步 1–5 層爬塔、雙武器與文字化世界觀）
+const INTRO_STORY = [
+  "平靜祥和的村落降臨了「文字魔王」，花草樹木、房屋乃至人民，都被魔王化為了一個個冰冷的文字。",
+  "為了拯救村落，身為勇者的你毅然踏入被文字侵蝕的領域，向第五層的「原典王座」前進。",
+  "然而，當你拾起怪物掉落的強力文字裝備時，你自己的血肉之軀也正逐漸被文字同化……",
+];
+
+const INTRO_RULES = [
+  `全遊戲分為 1～${MAX_FLOOR} 層爬塔，每層固定 ${ROUNDS_PER_FLOOR} 回合。`,
+  "每層開局建立 5 張牌的「抽取庫」：包含 4 張固定牌（2 張打鬥牌、1 張回復牌、1 張暫以回復牌代替的技能牌）加上 1 張隨機牌（從打鬥、回復、技能牌中隨機抽 1 張）。",
+  "每層第 1～4 回合會從抽取庫隨機抽出 2 張牌讓你二選一，選中的牌會從抽取庫消失；第 5 回合只剩最後 1 張牌可選。",
+  `第 1～4 層的第 6 回合固定為【傳送門 + 寶箱】，可從 4 件跨層保底裝備中隨機抽取 1 件，並在進入下一層時最大生命 +${FLOOR_HP_BONUS} 且回復 ${FLOOR_HP_BONUS} 點生命；第 5 層第 6 回合直接迎戰文字魔王。`,
+  "勇者擁有 4 個裝備欄：物理武器（加物攻）、魔法武器（加魔攻）、裝甲（同時加物防與魔防）、盾牌（加護盾）。打倒怪物或開寶箱獲得裝備時可選擇拾取替換或放棄，換裝時身體會逐漸文字化。",
+  "可從怪物名字顏色分辨特性（顏色隨 1～5 層由淺變深）：黃色名字擅長物理（物攻、高物防低魔防，弱點為魔法）、紅色名字擅長魔法（魔攻、高魔防低物防，弱點為物理）、橙色名字物魔雙修（隨機出招，每回合隨機出現物防或魔防減半的排斥破綻），文字魔王則為深橙色。",
+  "戰鬥開始擲 0–20 骰：單數勇者先攻，雙數對手先攻。每回合勇者可自由選擇【物理攻擊】或【魔法攻擊】。",
+  "物理傷害 = 物攻 + 骰子(0–20) − 對方物防；魔法傷害 = 魔攻 + 骰子(0–20) − 對方魔防（最低為 0）。受傷先扣護盾再扣生命，護盾每場戰鬥刷新，生命不會自動刷新。",
+];
+
+// 擲骰動畫時間（毫秒）
+const DICE_ROLL_MS = 1400; // 數字亂跳多久
+const DICE_TICK_MS = 100;  // 每隔多久換一次數字
+const DICE_HOLD_MS = 1000; // 停在結果上多久
+
+// 戰鬥效果動畫時間（毫秒）
+const SWORD_MS = 650;         // 勇者揮劍
+const HIT_MS = 500;           // 受到攻擊：金光（無傷）／搖動＋紅光（受傷）
+const GOLD_GLOW = "#ffd23f";  // 無傷金光顏色
+const RED_GLOW = "#ff2b2b";   // 受傷紅光顏色
+
+// 魔王出現動畫：頭像由小放大、越來越透明
+const BOSS_APPEAR_MS = 1800;  // 動畫長度
+const BOSS_SCALE_FROM = 0.2;  // 開始大小（倍數）
+const BOSS_SCALE_TO = 1.8;    // 結束大小（倍數）
+
+// 劇情文字動畫：文字出現後漸漸透明並消失
+const START_TEXT = "冒險開始了.....";  // 按下開始遊戲後
+const DEFEAT_TEXT = "勇者敗了......";  // 勇者被打敗後
+const STORY_SHOW_MS = 300;             // 文字浮現
+const STORY_HOLD_MS = 900;             // 文字完全清楚的時間
+const STORY_FADE_MS = 1600;            // 文字漸漸透明到消失
+const DEFEAT_WAIT_MS = 1200;           // 被打敗後先停一下，讓玩家看清最後一擊
+const DEFEAT_DARKEN_MS = 1200;         // 畫面變暗所需時間
+const DEFEAT_DARKNESS = 0.85;          // 變暗程度（0＝不變暗，1＝全黑）
+
+// 轉場動畫時間（毫秒）
+const FADE_MS = 300; // 淡出 / 淡入
+const SCAN_MS = 400; // 掃描線掃過
+
+/* =========================================================
+   樓層、三系怪物、裝備與跨層寶箱資料庫 (data.js)
+   資料來源：《勇者與魔王_全樓層怪物與裝備數值表.xlsx》與定案規格
+   ========================================================= */
+
+// 1–5 層樓層基本資訊
+const FLOORS = [
+  { floor: 1, name: "殘墨林徑", desc: "林間的草木皆已化為扭曲的黑墨字元，微風中傳來紙頁摩擦的沙沙聲。" },
+  { floor: 2, name: "蝕骨石窟", desc: "陰暗的石窟內壁刻滿了尖銳的部首與筆畫，踏入一步便覺寒意刺骨。" },
+  { floor: 3, name: "亂碼陵墓", desc: "古老的墓碑上閃爍著錯亂的字節與遺言，死去的守衛已被文字重構。" },
+  { floor: 4, name: "斷章深淵", desc: "失去了上下文的斷章裂谷，星辰與深淵的文字在此處劇烈碰撞。" },
+  { floor: 5, name: "原典王座", desc: "萬物文字化的源頭，純白與漆黑的原典文字拱衛著最深處的王座。" },
+];
+
+// 1–5 層怪物與攜帶裝備設定表（怪物除生命外，所有攻防護盾數值皆來自攜帶裝備）
+// slot 分為：physWeapon (物理武器)、magWeapon (魔法武器)、armor (雙防裝甲)、shield (護盾)
+const FLOOR_MONSTERS = {
+  1: [
+    {
+      name: "墨染史萊姆", type: "phys", typeLabel: "物理怪", hp: 18, weight: 40,
+      items: [
+        { slot: "physWeapon", name: "墨痕鈍刺", physAtk: 3, textDesc: "右手掌被黏稠的黑墨浸染，化作了「刺」字...力量湧現。" },
+        { slot: "armor", name: "凝墨外皮", physDef: 6, magDef: 1, textDesc: "胸口肌膚浮現墨色硬甲，化為「革」字...防護提升。" },
+      ],
+    },
+    {
+      name: "漂浮符文妖", type: "mag", typeLabel: "魔法怪", hp: 14, weight: 40,
+      items: [
+        { slot: "magWeapon", name: "散佚字元杖", magAtk: 4, textDesc: "右臂蔓延出幽藍的筆畫，握柄處凝成了「杖」字...魔力湧動。" },
+        { slot: "armor", name: "虛質殘頁", physDef: 0, magDef: 7, textDesc: "肩頭飄落半透明書頁，皮膚化作了「紋」字...魔抗增強。" },
+        { slot: "shield", name: "浮文字力場", shield: 2, textDesc: "左手浮起旋轉的字元屏障，生成了「盾」字護體力場。" },
+      ],
+    },
+    {
+      name: "墨痕聚合體", type: "chaos", typeLabel: "渾沌怪", hp: 24, weight: 20,
+      items: [
+        { slot: "physWeapon", name: "錯亂墨骨刃", physAtk: 5, textDesc: "右手骨骼劇痛並扭曲，凝結成一把墨色「刃」字骨刃。" },
+        { slot: "magWeapon", name: "錯亂符文刃", magAtk: 5, textDesc: "左臂被流動的藍光符碼覆蓋，化作散發微光的「咒」字短刃。" },
+        { slot: "armor", name: "拼湊符號殼", physDef: 4, magDef: 4, textDesc: "身軀被交錯的標點符號包裹，化作「甲」字保護內臟。" },
+        { slot: "shield", name: "殘墨重圓盾", shield: 4, textDesc: "左手凝固為厚重墨石，堅實的「壁」字環繞四周。" },
+      ],
+    },
+  ],
+  2: [
+    {
+      name: "蝕刻穴居人", type: "phys", typeLabel: "物理怪", hp: 26, weight: 40,
+      items: [
+        { slot: "physWeapon", name: "粗糙岩鑿斧", physAtk: 6, textDesc: "小臂肌肉骨化為粗獷的「斧」字...揮擊沉重有力。" },
+        { slot: "armor", name: "石刻重甲", physDef: 10, magDef: 2, textDesc: "軀幹石化剝落，背後烙印著厚重的「磐」字...物防大增。" },
+        { slot: "shield", name: "石板骨盾", shield: 3, textDesc: "一面粗糙的石質骨盾融入左腕，浮現「障」字。" },
+      ],
+    },
+    {
+      name: "洞窟秘術咒靈", type: "mag", typeLabel: "魔法怪", hp: 22, weight: 40,
+      items: [
+        { slot: "magWeapon", name: "石窟咒印杖", magAtk: 8, textDesc: "指尖流瀉暗色咒文，化作閃耀的「術」字...魔能澎湃。" },
+        { slot: "armor", name: "低語法袍", physDef: 2, magDef: 11, textDesc: "輕柔的絮語纏繞胸膛，皮膚化為幽暗的「霧」字抵禦法術。" },
+        { slot: "shield", name: "幽微咒靈盾", shield: 4, textDesc: "靈體光環在身前結成「御」字符印，吸收衝擊。" },
+      ],
+    },
+    {
+      name: "裂隙蝕骨獸", type: "chaos", typeLabel: "渾沌怪", hp: 34, weight: 20,
+      items: [
+        { slot: "physWeapon", name: "裂隙碎骨爪", physAtk: 8, textDesc: "右手五指化作泛著骨白的「爪」字...撕裂皮肉。" },
+        { slot: "magWeapon", name: "蝕隙咒魂爪", magAtk: 8, textDesc: "左手纏繞著幽紫色的文字「痕」...魔力破壞力劇增。" },
+        { slot: "armor", name: "骨甲與岩紋", physDef: 7, magDef: 7, textDesc: "肋骨外翻硬化，全身覆蓋「鎧」字符文，防禦均衡。" },
+        { slot: "shield", name: "蝕裂晶盾", shield: 6, textDesc: "晶體碎片在左臂聚合為「晶」字盾牌，堅固無比。" },
+      ],
+    },
+  ],
+  3: [
+    {
+      name: "亂碼骸骨死士", type: "phys", typeLabel: "物理怪", hp: 36, weight: 40,
+      items: [
+        { slot: "physWeapon", name: "鏽蝕斷碼劍", physAtk: 10, textDesc: "手骨徹底金屬文字化，凝結出殘破的「劍」字鋒刃。" },
+        { slot: "armor", name: "骨片鏈甲", physDef: 15, magDef: 4, textDesc: "鏈條與骨片穿透皮肉，在胸腹拼湊出冰冷的「鐵」字。" },
+        { slot: "shield", name: "亡者木盾", shield: 5, textDesc: "死寂的腐木附著於左臂，化為枯朽的「干」字格擋傷害。" },
+      ],
+    },
+    {
+      name: "哀號字節幽魂", type: "mag", typeLabel: "魔法怪", hp: 30, weight: 40,
+      items: [
+        { slot: "magWeapon", name: "噪點引魂幡", magAtk: 13, textDesc: "耳旁響起淒厲噪音，掌心文字炸裂為「魄」字魔引。" },
+        { slot: "armor", name: "虛無靈衣", physDef: 4, magDef: 16, textDesc: "身體漸趨透明虛化，軀幹化為空洞的「虛」字避開魔法。" },
+        { slot: "shield", name: "相位符文障", shield: 6, textDesc: "扭曲的字節在周身流轉，形成「界」字阻隔結界。" },
+      ],
+    },
+    {
+      name: "亂碼編譯魔像", type: "chaos", typeLabel: "渾沌怪", hp: 48, weight: 20,
+      items: [
+        { slot: "physWeapon", name: "編譯破壞槌", physAtk: 12, textDesc: "右臂化作沉重的符碼巨槌，砸下時顯現「碎」字威力。" },
+        { slot: "magWeapon", name: "重構解碼杖", magAtk: 12, textDesc: "左腕重組為閃爍錯誤代碼的法杖，激盪「析」字魔力。" },
+        { slot: "armor", name: "重構金屬軀", physDef: 11, magDef: 11, textDesc: "全身皮膚徹底質變為冰冷符文金屬，「鋼」字入骨。" },
+        { slot: "shield", name: "邏輯壁壘盾", shield: 8, textDesc: "縝密的編譯邏輯化作厚實光盾，顯露「絕」字屏障。" },
+      ],
+    },
+  ],
+  4: [
+    {
+      name: "淵面行刑者", type: "phys", typeLabel: "物理怪", hp: 48, weight: 40,
+      items: [
+        { slot: "physWeapon", name: "斷頭重鋼斧", physAtk: 15, textDesc: "肌肉撕裂並重組，化為充斥殺戮血光的「斬」字巨刃。" },
+        { slot: "armor", name: "淵黑重鎧", physDef: 22, magDef: 6, textDesc: "深淵重鐵吸附於骨骼，化作沉重而不可撼動的「固」字。" },
+        { slot: "shield", name: "深淵棘盾", shield: 8, textDesc: "尖刺自盾面暴突，刻印著漆黑的「拒」字反斥外力。" },
+      ],
+    },
+    {
+      name: "斷章星象術士", type: "mag", typeLabel: "魔法怪", hp: 40, weight: 40,
+      items: [
+        { slot: "magWeapon", name: "虛空星象儀", magAtk: 18, textDesc: "星辰軌跡在眼中轉動，指引出無窮星輝的「星」字法器。" },
+        { slot: "armor", name: "星痕深淵袍", physDef: 6, magDef: 23, textDesc: "法袍如同深空夜幕披身，體內鐫刻「曜」字吞噬法能。" },
+        { slot: "shield", name: "星穹光環盾", shield: 9, textDesc: "群星光暈化作環形光幕，在體表形成「域」字護罩。" },
+      ],
+    },
+    {
+      name: "虛空斷章巨靈", type: "chaos", typeLabel: "渾沌怪", hp: 65, weight: 20,
+      items: [
+        { slot: "physWeapon", name: "湮滅碎裂核", physAtk: 17, textDesc: "右掌中文字崩塌為引力核心，爆發「坍」字物理重擊。" },
+        { slot: "magWeapon", name: "虛無噬靈核", magAtk: 17, textDesc: "左手浮現深空文字漩渦，釋放撕裂維度的「噬」字魔能。" },
+        { slot: "armor", name: "次元褶皺護甲", physDef: 16, magDef: 16, textDesc: "空間褶皺化為戰衣，身軀化為折射萬物的「界」字防甲。" },
+        { slot: "shield", name: "虛無湮滅盾", shield: 12, textDesc: "空間虛無深洞化作巨盾，浮現「封」字抵禦衝擊。" },
+      ],
+    },
+  ],
+  5: [
+    {
+      name: "原典禁衛巨兵", type: "phys", typeLabel: "物理怪", hp: 62, weight: 40,
+      items: [
+        { slot: "physWeapon", name: "王座金敕戟", physAtk: 21, textDesc: "神聖金光貫通右臂，血肉完形為神聖威嚴的「敕」字金戟。" },
+        { slot: "armor", name: "原典神聖板甲", physDef: 30, magDef: 8, textDesc: "宛如聖殿梁柱般的純白文字化作胸甲，「城」字固若金湯。" },
+        { slot: "shield", name: "原初巨壁盾", shield: 12, textDesc: "原初文字構成的通天巨壁，散發不可逾越的「塹」字神威。" },
+      ],
+    },
+    {
+      name: "王座吟唱主教", type: "mag", typeLabel: "魔法怪", hp: 52, weight: 40,
+      items: [
+        { slot: "magWeapon", name: "終焉聖典", magAtk: 25, textDesc: "原典之言在心頭響起，右手捧起散發耀眼光芒的「典」字之書。" },
+        { slot: "armor", name: "審判聖輝袍", physDef: 8, magDef: 31, textDesc: "聖潔經文流淌周身，皮膚化作「聖」字，一切魔法皆化泡影。" },
+        { slot: "shield", name: "聖言庇護盾", shield: 14, textDesc: "頌唱之聲具象化為聖光壁，形成「佑」字終極聖盾。" },
+      ],
+    },
+    {
+      name: "文字同化核心", type: "chaos", typeLabel: "渾沌怪", hp: 85, weight: 20,
+      items: [
+        { slot: "physWeapon", name: "原典創生之刃", physAtk: 23, textDesc: "右臂文字凝聚為萬物實體，化為裁斷因果的「創」字巨劍。" },
+        { slot: "magWeapon", name: "原典終焉法杖", magAtk: 23, textDesc: "左手文字昇華為能量狂潮，點燃終結萬象的「滅」字法杖。" },
+        { slot: "armor", name: "文字萬象本體", physDef: 22, magDef: 22, textDesc: "全身完全同化為純粹文字，浮現「元」字不可摧毀之體。" },
+        { slot: "shield", name: "本源真理盾", shield: 16, textDesc: "真理文字構築的絕對防禦，展現終極「極」字力場。" },
+      ],
+    },
+  ],
+};
+
+// 第 1–4 層跨層寶箱裝備池（每層 4 件：物理武器、魔法武器、裝甲、護盾各 1 件，開寶箱時隨機 4 抽 1）
+// 強度嚴格設定於「當前層 (N) 與下一層 (N+1)」之間
+const FLOOR_CHEST_ITEMS = {
+  1: [
+    { slot: "physWeapon", name: "篆刻黑鐵劍", physAtk: 6, textDesc: "右手掌浮現鋒利的黑鐵筆畫，化作「鋒」字...斬擊更為凌厲。" },
+    { slot: "magWeapon", name: "螢光殘卷杖", magAtk: 6, textDesc: "左手指尖凝聚微光字元，化作「螢」字法杖...魔力穩定輸出。" },
+    { slot: "armor", name: "碑文護心鏡", physDef: 6, magDef: 6, textDesc: "胸前烙印出古樸的碑文，化作「護」字...物魔防護同時提升。" },
+    { slot: "shield", name: "凝字方盾", shield: 3, textDesc: "左臂文字緊密交織，化為堅固的「防」字方盾。" },
+  ],
+  2: [
+    { slot: "physWeapon", name: "碎岩重字錘", physAtk: 9, textDesc: "右臂骨肉與岩石文字融合，化作「錘」字...一擊足以碎石。" },
+    { slot: "magWeapon", name: "幽谷迴響杖", magAtk: 10, textDesc: "左手繚繞著石窟的低語文字，化作「響」字...魔能激盪。" },
+    { slot: "armor", name: "刻紋岩晶鎧", physDef: 9, magDef: 9, textDesc: "全身覆蓋上結晶化的岩紋文字，化作「堅」字重鎧。" },
+    { slot: "shield", name: "石髓壁壘盾", shield: 5, textDesc: "深層石髓文字在左腕隆起，化作厚重的「壘」字護盾。" },
+  ],
+  3: [
+    { slot: "physWeapon", name: "破碼斬鐵刀", physAtk: 14, textDesc: "右手徹底化為閃爍寒光的代碼刀刃，浮現「斷」字鋒芒。" },
+    { slot: "magWeapon", name: "亂流演算杖", magAtk: 15, textDesc: "左手被高速流動的演算符碼吞沒，化作「算」字魔杖。" },
+    { slot: "armor", name: "秘銀代碼甲", physDef: 14, magDef: 14, textDesc: "軀幹被精密的符文鎖甲覆蓋，烙印出無懈可擊的「密」字。" },
+    { slot: "shield", name: "防禦矩陣盾", shield: 8, textDesc: "立體文字矩陣在身前展開，凝結成「陣」字光盾。" },
+  ],
+  4: [
+    { slot: "physWeapon", name: "深淵裂界槍", physAtk: 19, textDesc: "右臂與深淵文字同化，延伸出貫穿空間的「裂」字長槍。" },
+    { slot: "magWeapon", name: "星淵詠嘆書", magAtk: 21, textDesc: "左手懸浮著吞吐星光的深淵法典，化作「詠」字魔導器。" },
+    { slot: "armor", name: "虛空星鎧", physDef: 19, magDef: 19, textDesc: "星辰與虛空文字交織成戰甲，胸口閃耀著「宙」字神威。" },
+    { slot: "shield", name: "次元折躍盾", shield: 12, textDesc: "扭曲的次元文字固定在左臂，化為偏轉萬物的「折」字巨盾。" },
+  ],
+};
+
+// 第 5 層終局魔王設定（《勇者與魔王_全樓層怪物與裝備數值表.xlsx》）
+const BOSS = {
+  name: "文字魔王",
+  fullTitle: "文字魔王",
+  type: "chaos",
+  typeLabel: "",
+  hp: 110,
+  isBoss: true,
+  items: [
+    { slot: "physWeapon", name: "褪色誓約聖劍·破甲", physAtk: 28, textDesc: "【前勇者的遺物】昔日佩劍的物理鋒芒，鏽跡斑斑卻飽含殺意。" },
+    { slot: "magWeapon", name: "褪色誓約聖劍·魔湧", magAtk: 28, textDesc: "【前勇者的遺物】昔日佩劍的殘留聖光，如今轉化為文字詛咒魔潮。" },
+    { slot: "armor", name: "破碎文字枷鎖鎧", physDef: 26, magDef: 26, textDesc: "【前勇者的遺物】被無數文字生生烙印在肉身骨髓的束縛重甲，無法脫卸。" },
+    { slot: "shield", name: "苦痛抗爭之盾", shield: 20, textDesc: "【前勇者的遺物】殘留著前代勇者微弱抗爭意識的盾牌，偶爾發出哀鳴。" },
+  ],
+};
+
+/* =========================================================
+   遊戲核心狀態與邏輯 (game.js)
+   包含：1–5 層 6 回合抽取庫、物/魔雙攻防、三系怪物與渾沌破綻、文字化演繹
+   ========================================================= */
+let hero, floor, round, turn, floorDeck, enemy, gameOver;
+
+const $status = document.getElementById("status");
+const $log = document.getElementById("log");
+const $choices = document.getElementById("choices");
+
+/* ===== 小工具 ===== */
+function escapeHtml(t) {
+  return String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+const NAME_REGEX = new RegExp(
+  "(勇者)|(" + Object.keys(ENEMY_COLORS).sort((a, b) => b.length - a.length).join("|") + ")", "g"
+);
+
+function colorize(html) {
+  return html.replace(NAME_REGEX, (m, isHero) => {
+    if (isHero) return `<span class="name" style="color:${HERO_COLOR}">${m}</span>`;
+    const isBoss = m === "文字魔王" ? " name-boss" : "";
+    return `<span class="name${isBoss}" style="color:${ENEMY_COLORS[m] || "#ff5c5c"}">${m}</span>`;
+  });
+}
+
+function rollD20() { return Math.floor(Math.random() * 21); } // 0–20
+function randomPick(list) { return list[Math.floor(Math.random() * list.length)]; }
+function weightedPick(list) {
+  const total = list.reduce((s, x) => s + x.weight, 0);
+  let r = Math.random() * total;
+  for (const x of list) { if ((r -= x.weight) < 0) return x; }
+  return list[list.length - 1];
+}
+
+// 格式化單件裝備顯示文字
+function itemText(item) {
+  if (!item) return "無";
+  if (item.slot === "physWeapon") return `${item.name}（物攻+${item.physAtk}）`;
+  if (item.slot === "magWeapon") return `${item.name}（魔攻+${item.magAtk}）`;
+  if (item.slot === "armor") return `${item.name}（物防+${item.physDef}／魔防+${item.magDef}）`;
+  if (item.slot === "shield") return `${item.name}（護盾+${item.shield}）`;
+  return item.name;
+}
+
+// 從基礎數值與 4 格裝備計算實際雙攻、雙防與護盾
+function calcStats(base, equip) {
+  return {
+    physAtk: (base.physAtk || 0) + (equip.physWeapon ? equip.physWeapon.physAtk : 0),
+    magAtk: (base.magAtk || 0) + (equip.magWeapon ? equip.magWeapon.magAtk : 0),
+    physDef: (base.physDef || 0) + (equip.armor ? equip.armor.physDef : 0),
+    magDef: (base.magDef || 0) + (equip.armor ? equip.armor.magDef : 0),
+    shield: (base.shield || 0) + (equip.shield ? equip.shield.shield : 0),
+  };
+}
+
+function getFloorInfo(fl) {
+  return FLOORS.find(f => f.floor === fl) || { floor: fl, name: `第 ${fl} 層`, desc: "" };
+}
+
+function cardTypeName(type) {
+  if (type === "monster") return "打鬥牌";
+  if (type === "camp") return "回復牌";
+  if (type === "skill_camp") return "技能牌(暫代回復)";
+  return "事件牌";
+}
+
+/* ===== 畫面輸出 ===== */
+function log(text, cls) {
+  const p = document.createElement("p");
+  p.innerHTML = colorize(escapeHtml(text));
+  if (cls) p.className = cls;
+  $log.appendChild(p);
+  $log.scrollTop = $log.scrollHeight;
+}
+function sep() { log("────────────────────────", "sep"); }
+
+function setChoices(list) {
+  $choices.innerHTML = "";
+  list.forEach(({ label, action }) => {
+    const b = document.createElement("button");
+    b.innerHTML = colorize(escapeHtml(label));
+    b.onclick = action;
+    $choices.appendChild(b);
+  });
+}
+
+function renderStatus() {
+  const s = calcStats(HERO_BASE, hero.equip);
+  const curShield = enemy ? hero.shield : s.shield;
+  const fInfo = getFloorInfo(floor);
+  const deckText = floorDeck && floorDeck.length > 0
+    ? floorDeck.map(c => cardTypeName(c.type)).join("、")
+    : (round === ROUNDS_PER_FLOOR ? (floor < MAX_FLOOR ? "【傳送門 + 寶箱】" : "【終局魔王戰】") : "無");
+
+  let html = `
+    <div class="title">勇者　第 ${floor} 層【${fInfo.name}】　第 ${round} / ${ROUNDS_PER_FLOOR} 回合</div>
+    <div>生命：${Math.max(0, hero.hp)} / ${hero.maxHp}</div>
+    <div>護盾：${curShield} / ${s.shield}</div>
+    <div>物攻：${s.physAtk}　魔攻：${s.magAtk}</div>
+    <div>物防：${s.physDef}　魔防：${s.magDef}</div>
+    <div class="full">物理武器：${itemText(hero.equip.physWeapon)}</div>
+    <div class="full">魔法武器：${itemText(hero.equip.magWeapon)}</div>
+    <div class="full">裝甲：${itemText(hero.equip.armor)}</div>
+    <div class="full">盾牌：${itemText(hero.equip.shield)}</div>
+    <div class="full dim">本層抽取庫剩餘（${floorDeck ? floorDeck.length : 0} 張）：${deckText}</div>`;
+
+  if (enemy) {
+    const weakNote = enemy.weakness === "phys"
+      ? "［破綻：物防減半］"
+      : (enemy.weakness === "mag" ? "［破綻：魔防減半］" : "");
+    const atkSummary = enemy.type === "phys"
+      ? `物攻 ${enemy.physAtk}`
+      : (enemy.type === "mag" ? `魔攻 ${enemy.magAtk}` : `物攻 ${enemy.physAtk}／魔攻 ${enemy.magAtk}`);
+    html += `<div class="full enemy-bar">── 敵人：${enemy.name}${weakNote}　生命 ${Math.max(0, enemy.hp)} / ${enemy.maxHp}　護盾 ${enemy.shield}　${atkSummary}　物防 ${enemy.curPhysDef}　魔防 ${enemy.curMagDef}</div>`;
+  }
+  $status.innerHTML = colorize(html);
+}
+
+/* ===== 擲骰與戰鬥效果動畫 ===== */
+const $dice = document.getElementById("dice");
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function rollDiceAnim(who, color, result, note) {
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $who = $dice.querySelector(".who"), $face = $dice.querySelector(".face"), $note = $dice.querySelector(".note");
+  $who.innerHTML = colorize(escapeHtml(who)) + " 擲骰";
+  $who.style.color = color || "#e8e8e8";
+  $note.innerHTML = colorize(escapeHtml(note || ""));
+  $face.classList.remove("landed");
+  $face.style.borderColor = color || "#e8e8e8";
+  $dice.classList.add("show");
+  if (!reduce) {
+    $face.classList.add("rolling");
+    const end = Date.now() + DICE_ROLL_MS;
+    while (Date.now() < end) {
+      $face.textContent = rollD20();
+      await sleep(DICE_TICK_MS);
+    }
+    $face.classList.remove("rolling");
+  }
+  $face.textContent = result;
+  $face.classList.add("landed");
+  await sleep(DICE_HOLD_MS);
+  $dice.classList.remove("show");
+  await sleep(120);
+}
+
+function replayClass(el, cls) {
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+}
+
+async function bossAppearAnim() {
+  const $b = document.getElementById("boss-appear");
+  replayClass($b, "show");
+  await sleep(window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 600 : BOSS_APPEAR_MS);
+  $b.classList.remove("show");
+}
+
+async function storyTextAnim(text) {
+  const $t = document.querySelector("#story .text");
+  $t.innerHTML = colorize(escapeHtml(text));
+  const total = STORY_SHOW_MS + STORY_HOLD_MS + STORY_FADE_MS;
+  const a = $t.animate([
+    { opacity: 0, offset: 0 },
+    { opacity: 1, offset: STORY_SHOW_MS / total },
+    { opacity: 1, offset: (STORY_SHOW_MS + STORY_HOLD_MS) / total },
+    { opacity: 0, offset: 1 },
+  ], { duration: total, easing: "ease-in-out", fill: "forwards" });
+  await a.finished;
+}
+
+async function storyBg(from, to, ms) {
+  const $s = document.getElementById("story");
+  const a = $s.animate([{ backgroundColor: `rgba(0,0,0,${from})` }, { backgroundColor: `rgba(0,0,0,${to})` }],
+    { duration: ms, easing: "ease-in-out", fill: "forwards" });
+  await a.finished;
+}
+
+async function playStartText() {
+  const $s = document.getElementById("story");
+  $s.classList.add("show");
+  $s.getAnimations().forEach(a => a.cancel());
+  $s.style.backgroundColor = "rgba(0,0,0,1)";
+  await storyTextAnim(START_TEXT);
+  await storyBg(1, 0, 500);
+  $s.classList.remove("show");
+  $s.getAnimations().forEach(a => a.cancel());
+}
+
+async function playDefeatText() {
+  const $s = document.getElementById("story");
+  await sleep(DEFEAT_WAIT_MS);
+  $s.getAnimations().forEach(a => a.cancel());
+  $s.style.backgroundColor = "rgba(0,0,0,0)";
+  $s.classList.add("show");
+  await storyBg(0, DEFEAT_DARKNESS, DEFEAT_DARKEN_MS);
+  await storyTextAnim(DEFEAT_TEXT);
+  showScreen($title, () => {
+    $s.classList.remove("show");
+    $s.getAnimations().forEach(a => a.cancel());
+  });
+}
+
+async function swordAnim() {
+  const $sword = document.getElementById("sword");
+  replayClass($sword, "show");
+  await sleep(SWORD_MS);
+  $sword.classList.remove("show");
+}
+
+async function heroHitAnim(lostHp) {
+  const $g = document.getElementById("game");
+  $log.classList.remove("glow-gold", "glow-red");
+  $g.classList.remove("shake");
+  if (lostHp) {
+    replayClass($log, "glow-red");
+    replayClass($g, "shake");
+  } else {
+    replayClass($log, "glow-gold");
+  }
+  await sleep(HIT_MS);
+  $log.classList.remove("glow-gold", "glow-red");
+  $g.classList.remove("shake");
+}
+
+/* =========================================================
+   1–5 層抽取庫與爬塔流程
+   ========================================================= */
+
+// 建立單層的 5 張牌抽取庫（4 張固定牌 + 1 張隨機牌）
+function buildFloorDeck(fl) {
+  const rawTypes = [...FIXED_FLOOR_CARDS, randomPick(RANDOM_FIFTH_POOL)];
+  const monsters = FLOOR_MONSTERS[fl] || FLOOR_MONSTERS[1];
+  return rawTypes.map((type, idx) => {
+    if (type === "monster") {
+      const m = weightedPick(monsters);
+      return {
+        id: `fl${fl}_card${idx}_${Math.random()}`,
+        type: "monster",
+        monster: m,
+        label: `【打鬥牌】遭遇${m.name}，迎戰`,
+      };
+    } else if (type === "camp") {
+      return {
+        id: `fl${fl}_card${idx}_${Math.random()}`,
+        type: "camp",
+        label: "【回復牌】在營地生火休息，生命回滿",
+      };
+    } else {
+      return {
+        id: `fl${fl}_card${idx}_${Math.random()}`,
+        type: "skill_camp",
+        label: "【技能牌（暫代：回復）】在殘頁篝火旁調息，生命回滿",
+      };
+    }
+  });
+}
+
+// 從當前樓層抽取庫隨機抽取 count 張不重複的牌
+function drawFromDeck(deck, count) {
+  const indices = deck.map((_, i) => i);
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+  return indices.slice(0, Math.min(count, deck.length)).map(i => deck[i]);
+}
+
+function newGame() {
+  hero = {
+    hp: HERO_BASE.hp,
+    maxHp: HERO_BASE.hp,
+    shield: 0,
+    equip: { physWeapon: null, magWeapon: null, armor: null, shield: null },
+  };
+  floor = 1;
+  round = 1;
+  turn = 1;
+  enemy = null;
+  gameOver = false;
+  floorDeck = buildFloorDeck(floor);
+
+  $log.innerHTML = "";
+  log("【勇者與魔王】", "big");
+  log("你踏入被文字魔王侵蝕的領域。每層共有 6 個回合，擊敗怪物穿戴文字裝備，邁向第五層的原典王座。");
+  const fInfo = getFloorInfo(floor);
+  log(`── 進入第 ${floor} 層【${fInfo.name}】：${fInfo.desc}`, "big");
+  presentRound();
+}
+
+// 顯示當前樓層與回合的選項
+function presentRound() {
+  enemy = null;
+  renderStatus();
+  sep();
+  const fInfo = getFloorInfo(floor);
+  log(`第 ${floor} 層【${fInfo.name}】— 第 ${round} / ${ROUNDS_PER_FLOOR} 回合（總第 ${turn} 回合）。`);
+
+  // 第 6 回合：第 1–4 層為【傳送門 + 寶箱】；第 5 層為【終局魔王戰】
+  if (round === ROUNDS_PER_FLOOR) {
+    if (floor < MAX_FLOOR) {
+      log("前方浮現通往下一層的文字傳送門，門前擺放著一個散發微光的跨層寶箱。", "big");
+      setChoices([
+        {
+          label: `【傳送門 + 寶箱】開啟第 ${floor} 層跨層寶箱並前往第 ${floor + 1} 層`,
+          action: () => {
+            turn++;
+            openFloorChest();
+          },
+        },
+      ]);
+    } else {
+      log("空氣突然變得沉重……王座上的鎖鏈寸寸斷裂，文字魔王緩緩抬起頭。", "big");
+      setChoices([]);
+      bossAppearAnim().then(() => {
+        setChoices([
+          {
+            label: `【魔王】${BOSS.fullTitle}出現了，無法逃避，迎戰`,
+            action: () => {
+              turn++;
+              startBattle(BOSS);
+            },
+          },
+        ]);
+      });
+    }
+    return;
+  }
+
+  // 第 1–5 回合：從本層抽取庫隨機抽取 2 張牌（第 5 回合只剩 1 張牌）
+  const drawn = drawFromDeck(floorDeck, 2);
+  if (drawn.length > 1) {
+    log(`從本層抽取庫（剩餘 ${floorDeck.length} 張）隨機抽出 2 張牌，請選擇一張前進（選中後該牌會從抽取庫消失）：`);
+  } else {
+    log("本層抽取庫只剩下最後 1 張牌：");
+  }
+
+  setChoices(
+    drawn.map(card => ({
+      label: card.label,
+      action: () => selectCard(card),
+    }))
+  );
+}
+
+// 玩家選擇一張牌後，將該張牌從抽取庫移除並執行
+function selectCard(card) {
+  const idx = floorDeck.findIndex(c => c.id === card.id);
+  if (idx !== -1) floorDeck.splice(idx, 1);
+  turn++;
+
+  if (card.type === "monster") {
+    startBattle(card.monster);
+  } else if (card.type === "camp") {
+    camp(false);
+  } else {
+    camp(true);
+  }
+}
+
+// 完成當前事件後推進到下一回合
+function advanceAfterEvent() {
+  round++;
+  presentRound();
+}
+
+/* ===== 營地回復（含暫代技能牌的回復） ===== */
+function camp(isSkillPlaceholder) {
+  const healed = hero.maxHp - hero.hp;
+  hero.hp = hero.maxHp;
+  if (isSkillPlaceholder) {
+    log(`【技能牌（暫以回復代替）】你在殘頁篝火旁靜心調息。生命回復 ${healed} 點，現在是 ${hero.hp} / ${hero.maxHp}。`);
+  } else {
+    log(`你在營地生火休息。生命回復 ${healed} 點，現在是 ${hero.hp} / ${hero.maxHp}。`);
+  }
+  renderStatus();
+  setChoices([{ label: "繼續前進", action: advanceAfterEvent }]);
+}
+
+/* ===== 第 6 回合：跨層寶箱與傳送門推進 ===== */
+function openFloorChest() {
+  const pool = FLOOR_CHEST_ITEMS[floor] || FLOOR_CHEST_ITEMS[1];
+  const item = randomPick(pool);
+  log(`你打開了第 ${floor} 層的跨層寶箱，從 4 件秘寶中抽出了${SLOT_NAME[item.slot]}：${itemText(item)}！`, "big");
+  offerItem(item, enterNextFloorPortal);
+}
+
+function enterNextFloorPortal() {
+  floor++;
+  round = 1;
+  floorDeck = buildFloorDeck(floor);
+  hero.maxHp += FLOOR_HP_BONUS;
+  hero.hp = Math.min(hero.maxHp, hero.hp + FLOOR_HP_BONUS);
+  const fInfo = getFloorInfo(floor);
+  sep();
+  log(`你踏入傳送門，成功抵達第 ${floor} 層【${fInfo.name}】！`, "big");
+  log(`跨層祝福發動：勇者最大生命 +${FLOOR_HP_BONUS}，並回復 ${FLOOR_HP_BONUS} 點生命（目前生命 ${hero.hp} / ${hero.maxHp}）。`, "hit");
+  log(`【${fInfo.name}】${fInfo.desc}`);
+  presentRound();
+}
+
+/* ===== 拾取裝備（替換同部位 + 身體文字化演繹） ===== */
+function offerItem(item, onDone) {
+  const old = hero.equip[item.slot];
+  log(`目前的${SLOT_NAME[item.slot]}：${itemText(old)}。`, "dim");
+  renderStatus();
+  setChoices([
+    {
+      label: old ? `拾取 ${item.name}（替換掉 ${old.name}）` : `拾取 ${item.name}`,
+      action: () => {
+        hero.equip[item.slot] = item;
+        log(`你裝備了 ${itemText(item)}。`);
+        if (item.textDesc) {
+          log(`「${item.textDesc}」`, "text-curse");
+        } else {
+          log(`「${SLOT_NAME[item.slot]}部位變爲文字了.....但是獲得了更強的力量。」`, "text-curse");
+        }
+        renderStatus();
+        onDone();
+      },
+    },
+    {
+      label: "不要，保留現有裝備",
+      action: () => {
+        log(`你放棄了 ${item.name}。`);
+        onDone();
+      },
+    },
+  ]);
+}
+
+/* =========================================================
+   戰鬥系統（雙武器切換、雙防禦結算、渾沌怪動態弱點）
+   ========================================================= */
+
+// 更新渾沌怪每回合動態排斥弱點（隨機物防減半或魔防減半）
+function refreshChaosWeakness(announce) {
+  if (!enemy || enemy.type !== "chaos") return;
+  enemy.weakness = Math.random() < 0.5 ? "phys" : "mag";
+  if (enemy.weakness === "phys") {
+    enemy.curPhysDef = Math.floor(enemy.physDef / 2);
+    enemy.curMagDef = enemy.magDef;
+    if (announce) {
+      log(`【破綻】${enemy.name}體內的文字結構劇烈排斥，本回合「物理防禦」減半（${enemy.physDef} → ${enemy.curPhysDef}）！`, "hit");
+    }
+  } else {
+    enemy.curPhysDef = enemy.physDef;
+    enemy.curMagDef = Math.floor(enemy.magDef / 2);
+    if (announce) {
+      log(`【破綻】${enemy.name}體內的文字結構劇烈排斥，本回合「魔法防禦」減半（${enemy.magDef} → ${enemy.curMagDef}）！`, "hit");
+    }
+  }
+}
+
+function showCombatButtons() {
+  if (!enemy || hero.hp <= 0) return;
+  const s = calcStats(HERO_BASE, hero.equip);
+  const wPhys = hero.equip.physWeapon ? hero.equip.physWeapon.name : "徒手";
+  const wMag = hero.equip.magWeapon ? hero.equip.magWeapon.name : "基礎魔力";
+  setChoices([
+    {
+      label: `【物理攻擊】使用${wPhys}（物攻 ${s.physAtk} vs 敵物防 ${enemy.curPhysDef}）`,
+      action: () => heroAttack("phys"),
+    },
+    {
+      label: `【魔法攻擊】使用${wMag}（魔攻 ${s.magAtk} vs 敵魔防 ${enemy.curMagDef}）`,
+      action: () => heroAttack("mag"),
+    },
+  ]);
+}
+
+async function startBattle(template) {
+  const equip = { physWeapon: null, magWeapon: null, armor: null, shield: null };
+  template.items.forEach(it => { equip[it.slot] = it; });
+  const st = calcStats({ physAtk: 0, magAtk: 0, physDef: 0, magDef: 0, shield: 0 }, equip);
+
+  enemy = {
+    name: template.name,
+    type: template.type || "phys",
+    typeLabel: template.typeLabel || "怪物",
+    isBoss: !!template.isBoss,
+    hp: template.hp,
+    maxHp: template.hp,
+    physAtk: st.physAtk,
+    magAtk: st.magAtk,
+    physDef: st.physDef,
+    magDef: st.magDef,
+    curPhysDef: st.physDef,
+    curMagDef: st.magDef,
+    shield: st.shield,
+    weakness: null,
+    items: template.items,
+  };
+
+  // 護盾每場戰鬥開始時刷新
+  hero.shield = calcStats(HERO_BASE, hero.equip).shield;
+  setChoices([]);
+  renderStatus();
+
+  const atkDesc = enemy.type === "phys"
+    ? `物攻 ${enemy.physAtk}`
+    : (enemy.type === "mag" ? `魔攻 ${enemy.magAtk}` : `物攻 ${enemy.physAtk}／魔攻 ${enemy.magAtk}`);
+  log(`戰鬥開始！對手是${enemy.name}（生命 ${enemy.hp}、${atkDesc}、物防 ${enemy.physDef}、魔防 ${enemy.magDef}、護盾 ${enemy.shield}）。`, "big");
+
+  if (enemy.type === "chaos") {
+    refreshChaosWeakness(true);
+  }
+  renderStatus();
+
+  // 擲骰決定先攻：單數勇者先、雙數對手先
+  const r = rollD20();
+  await rollDiceAnim("先攻判定", null, r, "單數＝勇者先攻／雙數＝" + enemy.name + "先攻");
+  if (r % 2 === 1) {
+    log(`先攻骰：${r}（單數），勇者先攻。`);
+  } else {
+    log(`先攻骰：${r}（雙數），${enemy.name}先攻。`);
+    await enemyAttack();
+    if (hero.hp <= 0) return;
+  }
+  renderStatus();
+  showCombatButtons();
+}
+
+// 計算並套用傷害：先扣護盾，再扣生命
+function dealDamage(attackerName, atkType, atk, def, target, targetName, dice) {
+  const atkLabel = atkType === "mag" ? "魔法攻擊" : "物理攻擊";
+  const defLabel = atkType === "mag" ? "魔防" : "物防";
+  const dmg = Math.max(0, atk + dice - def);
+  const toShield = Math.min(target.shield, dmg);
+  const toHp = dmg - toShield;
+  target.shield -= toShield;
+  target.hp -= toHp;
+
+  let msg = `${attackerName}發動${atkLabel}：${atk} + 骰子 ${dice} − ${defLabel} ${def} = ${dmg} 傷害`;
+  if (dmg > 0) {
+    const parts = [];
+    if (toShield > 0) parts.push(`護盾 −${toShield}`);
+    if (toHp > 0) parts.push(`生命 −${toHp}`);
+    msg += `（${parts.join("，")}）`;
+  }
+  msg += `。${targetName}剩下生命 ${Math.max(0, target.hp)}、護盾 ${target.shield}。`;
+  return msg;
+}
+
+async function heroAttack(atkType) {
+  setChoices([]); // 動畫期間鎖定按鈕
+  const s = calcStats(HERO_BASE, hero.equip);
+  const isMag = atkType === "mag";
+  const atkVal = isMag ? s.magAtk : s.physAtk;
+  const defVal = isMag ? enemy.curMagDef : enemy.curPhysDef;
+  const labelNote = isMag
+    ? `魔攻 ${atkVal} + 骰子 − 魔防 ${defVal}`
+    : `物攻 ${atkVal} + 骰子 − 物防 ${defVal}`;
+
+  const dice = rollD20();
+  await rollDiceAnim("勇者", HERO_COLOR, dice, labelNote);
+  await swordAnim();
+
+  const heroTarget = { shield: enemy.shield, hp: enemy.hp };
+  log(dealDamage("勇者", atkType, atkVal, defVal, heroTarget, enemy.name, dice), "hit");
+  enemy.shield = heroTarget.shield;
+  enemy.hp = heroTarget.hp;
+  renderStatus();
+
+  if (enemy.hp <= 0) return winBattle();
+
+  await enemyAttack();
+  if (hero.hp <= 0) return;
+
+  // 渾沌怪每回合結束後動態切換排斥弱點
+  if (enemy.type === "chaos") {
+    refreshChaosWeakness(true);
+  }
+  renderStatus();
+  showCombatButtons();
+}
+
+async function enemyAttack() {
+  const s = calcStats(HERO_BASE, hero.equip);
+  let atkType = "phys";
+  if (enemy.type === "mag") {
+    atkType = "mag";
+  } else if (enemy.type === "chaos") {
+    atkType = Math.random() < 0.5 ? "phys" : "mag";
+  }
+
+  const isMag = atkType === "mag";
+  const atkVal = isMag ? enemy.magAtk : enemy.physAtk;
+  const defVal = isMag ? s.magDef : s.physDef;
+  const labelNote = isMag
+    ? `魔法攻擊 ${atkVal} + 骰子 − 勇者魔防 ${defVal}`
+    : `物理攻擊 ${atkVal} + 骰子 − 勇者物防 ${defVal}`;
+
+  const dice = rollD20();
+  await rollDiceAnim(enemy.name, ENEMY_COLORS[enemy.name], dice, labelNote);
+
+  const target = { shield: hero.shield, hp: hero.hp };
+  const hpBefore = hero.hp;
+  log(dealDamage(enemy.name, atkType, atkVal, defVal, target, "勇者", dice), "hurt");
+  hero.shield = target.shield;
+  hero.hp = target.hp;
+  renderStatus();
+
+  await heroHitAnim(hero.hp < hpBefore);
+  if (hero.hp <= 0) loseGame();
+}
+
+function winBattle() {
+  if (enemy.isBoss) {
+    log("文字魔王倒下了！束縛大地的文字詛咒隨之瓦解，萬物重新恢復了血肉與生機。", "big");
+    log(`【勝利】你成功突破全部 ${MAX_FLOOR} 層，討伐了文字魔王！`, "big");
+    enemy = null;
+    renderStatus();
+    setChoices([
+      { label: "再玩一次", action: () => { newGame(); playStartText(); } },
+      { label: "返回標題畫面", action: goTitle },
+    ]);
+    return;
+  }
+  log(`你打倒了${enemy.name}！`, "big");
+  const drop = randomPick(enemy.items);
+  log(`${enemy.name}掉落了一件${SLOT_NAME[drop.slot]}：${itemText(drop)}。`);
+  enemy = null;
+  offerItem(drop, advanceAfterEvent);
+}
+
+function loseGame() {
+  gameOver = true;
+  hero.hp = 0;
+  log(`勇者倒下了……被${enemy.name}擊敗，意識逐漸被冰冷的文字吞噬。`, "big");
+  log(`【遊戲結束】止步於第 ${floor} 層第 ${round} 回合。`, "big");
+  enemy = null;
+  renderStatus();
+  setChoices([]);
+  playDefeatText();
+}
+
+/* =========================================================
+   標題畫面、介紹畫面與轉場
+   ========================================================= */
+const $title = document.getElementById("title-screen");
+const $intro = document.getElementById("intro-screen");
+const $game = document.getElementById("game");
+const $fade = document.getElementById("fade");
+let transitioning = false;
+
+document.documentElement.style.setProperty("--fade-ms", FADE_MS + "ms");
+document.documentElement.style.setProperty("--sword-ms", SWORD_MS + "ms");
+document.documentElement.style.setProperty("--boss-ms", BOSS_APPEAR_MS + "ms");
+document.documentElement.style.setProperty("--boss-from", BOSS_SCALE_FROM);
+document.documentElement.style.setProperty("--boss-to", BOSS_SCALE_TO);
+document.documentElement.style.setProperty("--hit-ms", HIT_MS + "ms");
+document.documentElement.style.setProperty("--gold", GOLD_GLOW);
+document.documentElement.style.setProperty("--red", RED_GLOW);
+document.documentElement.style.setProperty("--scan-ms", SCAN_MS + "ms");
+document.getElementById("title-logo").textContent = TITLE_TEXT;
+document.getElementById("title-sub").textContent = TITLE_SUB;
+document.getElementById("intro-box").innerHTML = colorize(
+  "<h2>【遊戲背景】</h2>" + INTRO_STORY.map(t => `<p>${t}</p>`).join("") +
+  "<h2>【基本玩法】</h2><ul>" + INTRO_RULES.map(t => `<li>${t}</li>`).join("") + "</ul>"
+);
+
+function showScreen(target, beforeShow) {
+  if (transitioning) return;
+  transitioning = true;
+  $fade.classList.add("on");
+  setTimeout(() => {
+    [$title, $intro, $game].forEach(el => el.classList.add("hidden"));
+    if (beforeShow) beforeShow();
+    target.classList.remove("hidden");
+    target.classList.remove("enter");
+    void target.offsetWidth;
+    target.classList.add("enter");
+    $fade.classList.remove("on");
+    setTimeout(() => { transitioning = false; }, FADE_MS);
+  }, Math.max(FADE_MS, SCAN_MS));
+}
+
+function goTitle() { showScreen($title); }
+function goIntro() { showScreen($intro, () => { document.getElementById("intro-box").scrollTop = 0; }); }
+function goGame() { showScreen($game, () => { newGame(); playStartText(); }); }
+
+document.getElementById("btn-start").onclick = goGame;
+document.getElementById("btn-intro").onclick = goIntro;
+document.getElementById("btn-back").onclick = goTitle;
+document.getElementById("btn-intro-start").onclick = goGame;
+
+</script>
+</body>
+</html>
