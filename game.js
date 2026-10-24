@@ -1,6 +1,7 @@
 /* =========================================================
    遊戲核心狀態與邏輯 (game.js)
-   包含：1–5 層 6 回合抽取庫、物/魔雙攻防、三系怪物與渾沌破綻、文字化演繹
+   包含：1–5 層 6 回合抽取庫、物/魔雙攻防、5 格常駐裝備欄（含飾品）、
+   一階段魔王意識掙扎、二階段真魔王心魔戰、勇者之劍與徒手彩蛋
    ========================================================= */
 let hero, floor, round, turn, floorDeck, enemy, gameOver;
 
@@ -13,15 +14,31 @@ function escapeHtml(t) {
   return String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
-const NAME_REGEX = new RegExp(
-  "(勇者)|(" + Object.keys(ENEMY_COLORS).sort((a, b) => b.length - a.length).join("|") + ")", "g"
-);
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildNameRegex() {
+  const escapedKeys = Object.keys(ENEMY_COLORS)
+    .sort((a, b) => b.length - a.length)
+    .map(escapeRegExp);
+  const htmlEscapedHidden = escapeRegExp(escapeHtml(PHASE2_BOSS_HIDDEN_NAME));
+  if (!escapedKeys.includes(htmlEscapedHidden)) {
+    escapedKeys.push(htmlEscapedHidden);
+  }
+  return new RegExp("(勇者)|(" + escapedKeys.join("|") + ")", "g");
+}
+
+const NAME_REGEX = buildNameRegex();
 
 function colorize(html) {
   return html.replace(NAME_REGEX, (m, isHero) => {
     if (isHero) return `<span class="name" style="color:${HERO_COLOR}">${m}</span>`;
-    const isBoss = m === "文字魔王" ? " name-boss" : "";
-    return `<span class="name${isBoss}" style="color:${ENEMY_COLORS[m] || "#ff5c5c"}">${m}</span>`;
+    const rawKey = m.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
+    const isBoss = (rawKey === "文字魔王" || rawKey === PHASE2_BOSS_HIDDEN_NAME || rawKey === PHASE2_BOSS_TRUE_NAME || rawKey === "真魔王")
+      ? " name-boss"
+      : "";
+    return `<span class="name${isBoss}" style="color:${ENEMY_COLORS[rawKey] || "#ff5c5c"}">${m}</span>`;
   });
 }
 
@@ -41,18 +58,36 @@ function itemText(item) {
   if (item.slot === "magWeapon") return `${item.name}（魔攻+${item.magAtk}）`;
   if (item.slot === "armor") return `${item.name}（物防+${item.physDef}／魔防+${item.magDef}）`;
   if (item.slot === "shield") return `${item.name}（護盾+${item.shield}）`;
+  if (item.slot === "accessory") {
+    if (item.isHeroSword) {
+      const blocks = item.blocksLeft > 0 ? `殘魂擋死剩餘 ${item.blocksLeft} 次` : "殘魂已消逝";
+      return `${item.name}（攻擊×${item.atkMult}／${blocks}）`;
+    }
+    return item.desc ? `${item.name}（${item.desc}）` : item.name;
+  }
   return item.name;
 }
 
-// 從基礎數值與 4 格裝備計算實際雙攻、雙防與護盾
-function calcStats(base, equip) {
-  return {
-    physAtk: (base.physAtk || 0) + (equip.physWeapon ? equip.physWeapon.physAtk : 0),
-    magAtk: (base.magAtk || 0) + (equip.magWeapon ? equip.magWeapon.magAtk : 0),
-    physDef: (base.physDef || 0) + (equip.armor ? equip.armor.physDef : 0),
-    magDef: (base.magDef || 0) + (equip.armor ? equip.armor.magDef : 0),
-    shield: (base.shield || 0) + (equip.shield ? equip.shield.shield : 0),
-  };
+// 從基礎數值與裝備計算實際雙攻、雙防與護盾
+// 註：allowAccessory = true 時計算飾品【勇者之劍】的未計算前攻擊力 ×1.5 加成；二階段真魔王複製時設為 false
+function calcStats(base, equip, allowAccessory = true) {
+  let physAtk = (base.physAtk || 0) + (equip.physWeapon ? equip.physWeapon.physAtk : 0);
+  let magAtk = (base.magAtk || 0) + (equip.magWeapon ? equip.magWeapon.magAtk : 0);
+  const physDef = (base.physDef || 0) + (equip.armor ? equip.armor.physDef : 0);
+  const magDef = (base.magDef || 0) + (equip.armor ? equip.armor.magDef : 0);
+  const shield = (base.shield || 0) + (equip.shield ? equip.shield.shield : 0);
+
+  if (allowAccessory && equip.accessory && equip.accessory.atkMult) {
+    physAtk = Math.floor(physAtk * equip.accessory.atkMult);
+    magAtk = Math.floor(magAtk * equip.accessory.atkMult);
+  }
+  return { physAtk, magAtk, physDef, magDef, shield };
+}
+
+// 檢查勇者是否全程未穿戴任何文字裝備（完全徒手／初始狀態）
+function isCompletelyUnarmed() {
+  if (!hero || !hero.equip) return false;
+  return !hero.equip.physWeapon && !hero.equip.magWeapon && !hero.equip.armor && !hero.equip.shield;
 }
 
 function getFloorInfo(fl) {
@@ -77,25 +112,34 @@ function log(text, cls) {
 function sep() { log("────────────────────────", "sep"); }
 
 function setChoices(list) {
+  if (document.activeElement && typeof document.activeElement.blur === "function") {
+    document.activeElement.blur();
+  }
   $choices.innerHTML = "";
   list.forEach(({ label, action }) => {
     const b = document.createElement("button");
     b.innerHTML = colorize(escapeHtml(label));
-    b.onclick = action;
+    b.onclick = () => {
+      b.blur();
+      action();
+    };
     $choices.appendChild(b);
   });
 }
 
 function renderStatus() {
-  const s = calcStats(HERO_BASE, hero.equip);
+  const s = calcStats(HERO_BASE, hero.equip, true);
   const curShield = enemy ? hero.shield : s.shield;
   const fInfo = getFloorInfo(floor);
+  const stageTitle = (enemy && enemy.isPhase2Boss)
+    ? `勇者　精神世界【心魔決戰】`
+    : `勇者　第 ${floor} 層【${fInfo.name}】　第 ${round} / ${ROUNDS_PER_FLOOR} 回合`;
   const deckText = floorDeck && floorDeck.length > 0
     ? floorDeck.map(c => cardTypeName(c.type)).join("、")
     : (round === ROUNDS_PER_FLOOR ? (floor < MAX_FLOOR ? "【傳送門 + 寶箱】" : "【終局魔王戰】") : "無");
 
   let html = `
-    <div class="title">勇者　第 ${floor} 層【${fInfo.name}】　第 ${round} / ${ROUNDS_PER_FLOOR} 回合</div>
+    <div class="title">${stageTitle}</div>
     <div>生命：${Math.max(0, hero.hp)} / ${hero.maxHp}</div>
     <div>護盾：${curShield} / ${s.shield}</div>
     <div>物攻：${s.physAtk}　魔攻：${s.magAtk}</div>
@@ -104,12 +148,13 @@ function renderStatus() {
     <div class="full">魔法武器：${itemText(hero.equip.magWeapon)}</div>
     <div class="full">裝甲：${itemText(hero.equip.armor)}</div>
     <div class="full">盾牌：${itemText(hero.equip.shield)}</div>
+    <div class="full">飾品：${itemText(hero.equip.accessory)}</div>
     <div class="full dim">本層抽取庫剩餘（${floorDeck ? floorDeck.length : 0} 張）：${deckText}</div>`;
 
   if (enemy) {
     const weakNote = enemy.weakness === "phys"
       ? "［破綻：物防減半］"
-      : (enemy.weakness === "mag" ? "［破綻：魔防減半］" : "");
+      : (enemy.weakness === "mag" ? "［破綻：魔防減半］" : (enemy.inRage ? "［狂暴：攻擊×1.5］" : ""));
     const atkSummary = enemy.type === "phys"
       ? `物攻 ${enemy.physAtk}`
       : (enemy.type === "mag" ? `魔攻 ${enemy.magAtk}` : `物攻 ${enemy.physAtk}／魔攻 ${enemy.magAtk}`);
@@ -180,6 +225,23 @@ async function storyBg(from, to, ms) {
   await a.finished;
 }
 
+// 通用黑幕文字消失演出：畫面變暗 → 依序在畫面中心浮現每句文字並漸漸增加透明度直到完全消失 → 畫面亮度回復正常（或維持黑幕交由後續轉場）
+async function playStorySequence(lines, darkness = DEFEAT_DARKNESS, restoreBrightness = true) {
+  const $s = document.getElementById("story");
+  $s.getAnimations().forEach(a => a.cancel());
+  $s.style.backgroundColor = "rgba(0,0,0,0)";
+  $s.classList.add("show");
+  await storyBg(0, darkness, 500);
+  for (const line of lines) {
+    await storyTextAnim(line);
+  }
+  if (restoreBrightness) {
+    await storyBg(darkness, 0, 500);
+    $s.classList.remove("show");
+    $s.getAnimations().forEach(a => a.cancel());
+  }
+}
+
 async function playStartText() {
   const $s = document.getElementById("story");
   $s.classList.add("show");
@@ -191,14 +253,17 @@ async function playStartText() {
   $s.getAnimations().forEach(a => a.cancel());
 }
 
-async function playDefeatText() {
+async function playDefeatText(customLines) {
   const $s = document.getElementById("story");
   await sleep(DEFEAT_WAIT_MS);
   $s.getAnimations().forEach(a => a.cancel());
   $s.style.backgroundColor = "rgba(0,0,0,0)";
   $s.classList.add("show");
   await storyBg(0, DEFEAT_DARKNESS, DEFEAT_DARKEN_MS);
-  await storyTextAnim(DEFEAT_TEXT);
+  const lines = Array.isArray(customLines) && customLines.length > 0 ? customLines : [DEFEAT_TEXT];
+  for (const line of lines) {
+    await storyTextAnim(line);
+  }
   showScreen($title, () => {
     $s.classList.remove("show");
     $s.getAnimations().forEach(a => a.cancel());
@@ -275,7 +340,7 @@ function newGame() {
     hp: HERO_BASE.hp,
     maxHp: HERO_BASE.hp,
     shield: 0,
-    equip: { physWeapon: null, magWeapon: null, armor: null, shield: null },
+    equip: { physWeapon: null, magWeapon: null, armor: null, shield: null, accessory: null },
   };
   floor = 1;
   round = 1;
@@ -434,12 +499,13 @@ function offerItem(item, onDone) {
 }
 
 /* =========================================================
-   戰鬥系統（雙武器切換、雙防禦結算、渾沌怪動態弱點）
+   戰鬥系統（雙武器切換、雙防禦結算、渾沌怪動態弱點、二階段心魔戰）
    ========================================================= */
 
 // 更新渾沌怪每回合動態排斥弱點（隨機物防減半或魔防減半）
+// 註：二階段真魔王雖為特別渾沌怪，但設定為「不減半防禦」
 function refreshChaosWeakness(announce) {
-  if (!enemy || enemy.type !== "chaos") return;
+  if (!enemy || enemy.type !== "chaos" || enemy.isPhase2Boss) return;
   enemy.weakness = Math.random() < 0.5 ? "phys" : "mag";
   if (enemy.weakness === "phys") {
     enemy.curPhysDef = Math.floor(enemy.physDef / 2);
@@ -458,46 +524,76 @@ function refreshChaosWeakness(announce) {
 
 function showCombatButtons() {
   if (!enemy || hero.hp <= 0) return;
-  const s = calcStats(HERO_BASE, hero.equip);
+  const s = calcStats(HERO_BASE, hero.equip, true);
   const wPhys = hero.equip.physWeapon ? hero.equip.physWeapon.name : "徒手";
   const wMag = hero.equip.magWeapon ? hero.equip.magWeapon.name : "基礎魔力";
+  const swordTag = (hero.equip.accessory && hero.equip.accessory.isHeroSword) ? "［勇者之劍×1.5］" : "";
   setChoices([
     {
-      label: `【物理攻擊】使用${wPhys}（物攻 ${s.physAtk} vs 敵物防 ${enemy.curPhysDef}）`,
+      label: `【物理攻擊】使用${wPhys}${swordTag}（物攻 ${s.physAtk} vs 敵物防 ${enemy.curPhysDef}）`,
       action: () => heroAttack("phys"),
     },
     {
-      label: `【魔法攻擊】使用${wMag}（魔攻 ${s.magAtk} vs 敵魔防 ${enemy.curMagDef}）`,
+      label: `【魔法攻擊】使用${wMag}${swordTag}（魔攻 ${s.magAtk} vs 敵魔防 ${enemy.curMagDef}）`,
       action: () => heroAttack("mag"),
     },
   ]);
 }
 
 async function startBattle(template) {
-  const equip = { physWeapon: null, magWeapon: null, armor: null, shield: null };
-  template.items.forEach(it => { equip[it.slot] = it; });
-  const st = calcStats({ physAtk: 0, magAtk: 0, physDef: 0, magDef: 0, shield: 0 }, equip);
+  if (template.isPhase2Boss) {
+    // 二階段真魔王：除生命（140）與飾品（勇者之劍）外，完全 1:1 鏡像複製勇者（含基礎 8 點雙攻雙防＋4 件文字裝備），且不減半防禦
+    const mirror = calcStats(HERO_BASE, hero.equip, false);
+    enemy = {
+      name: template.name,
+      trueName: template.trueName,
+      type: "chaos",
+      typeLabel: template.typeLabel || "真魔王",
+      isBoss: false,
+      isPhase2Boss: true,
+      hp: template.hp,
+      maxHp: template.hp,
+      physAtk: mirror.physAtk,
+      magAtk: mirror.magAtk,
+      physDef: mirror.physDef,
+      magDef: mirror.magDef,
+      curPhysDef: mirror.physDef,
+      curMagDef: mirror.magDef,
+      shield: mirror.shield,
+      weakness: null,
+      halfHpTriggered: false,
+      firstAttackDone: false,
+      inRage: false,
+      items: [],
+    };
+  } else {
+    const equip = { physWeapon: null, magWeapon: null, armor: null, shield: null };
+    template.items.forEach(it => { equip[it.slot] = it; });
+    const st = calcStats({ physAtk: 0, magAtk: 0, physDef: 0, magDef: 0, shield: 0 }, equip, false);
 
-  enemy = {
-    name: template.name,
-    type: template.type || "phys",
-    typeLabel: template.typeLabel || "怪物",
-    isBoss: !!template.isBoss,
-    hp: template.hp,
-    maxHp: template.hp,
-    physAtk: st.physAtk,
-    magAtk: st.magAtk,
-    physDef: st.physDef,
-    magDef: st.magDef,
-    curPhysDef: st.physDef,
-    curMagDef: st.magDef,
-    shield: st.shield,
-    weakness: null,
-    items: template.items,
-  };
+    enemy = {
+      name: template.name,
+      type: template.type || "phys",
+      typeLabel: template.typeLabel || "怪物",
+      isBoss: !!template.isBoss,
+      isPhase2Boss: false,
+      hp: template.hp,
+      maxHp: template.hp,
+      physAtk: st.physAtk,
+      magAtk: st.magAtk,
+      physDef: st.physDef,
+      magDef: st.magDef,
+      curPhysDef: st.physDef,
+      curMagDef: st.magDef,
+      shield: st.shield,
+      weakness: null,
+      halfHpTriggered: false,
+      items: template.items,
+    };
+  }
 
   // 護盾每場戰鬥開始時刷新
-  hero.shield = calcStats(HERO_BASE, hero.equip).shield;
+  hero.shield = calcStats(HERO_BASE, hero.equip, true).shield;
   setChoices([]);
   renderStatus();
 
@@ -506,7 +602,13 @@ async function startBattle(template) {
     : (enemy.type === "mag" ? `魔攻 ${enemy.magAtk}` : `物攻 ${enemy.physAtk}／魔攻 ${enemy.magAtk}`);
   log(`戰鬥開始！對手是${enemy.name}（生命 ${enemy.hp}、${atkDesc}、物防 ${enemy.physDef}、魔防 ${enemy.magDef}、護盾 ${enemy.shield}）。`, "big");
 
-  if (enemy.type === "chaos") {
+  if (enemy.isBoss) {
+    log("魔王的力量有點奇怪，似乎不屬於這裏……", "text-curse");
+  } else if (enemy.isPhase2Boss) {
+    log(`【精神世界】${enemy.name}完全複製了你身上的文字裝備與基礎能力（不包含飾品【勇者之劍】）！`, "text-curse");
+  }
+
+  if (enemy.type === "chaos" && !enemy.isPhase2Boss) {
     refreshChaosWeakness(true);
   }
   renderStatus();
@@ -519,7 +621,7 @@ async function startBattle(template) {
   } else {
     log(`先攻骰：${r}（雙數），${enemy.name}先攻。`);
     await enemyAttack();
-    if (hero.hp <= 0) return;
+    if (!enemy || hero.hp <= 0) return;
   }
   renderStatus();
   showCombatButtons();
@@ -548,7 +650,7 @@ function dealDamage(attackerName, atkType, atk, def, target, targetName, dice) {
 
 async function heroAttack(atkType) {
   setChoices([]); // 動畫期間鎖定按鈕
-  const s = calcStats(HERO_BASE, hero.equip);
+  const s = calcStats(HERO_BASE, hero.equip, true);
   const isMag = atkType === "mag";
   const atkVal = isMag ? s.magAtk : s.physAtk;
   const defVal = isMag ? enemy.curMagDef : enemy.curPhysDef;
@@ -566,13 +668,39 @@ async function heroAttack(atkType) {
   enemy.hp = heroTarget.hp;
   renderStatus();
 
-  if (enemy.hp <= 0) return winBattle();
+  // 二階段真魔王：勇者第一次攻擊後的專屬台詞
+  if (enemy.isPhase2Boss && !enemy.firstAttackDone) {
+    enemy.firstAttackDone = true;
+    log(`${enemy.name}：「啊啊你爲甚麼會有前勇者的武器，這個混蛋竟然死後也不安寧！！！」`, "text-curse");
+  }
+
+  if (enemy.hp <= 0) { await winBattle(); return; }
+
+  // 一階段魔王半血意識掙扎加劇提示
+  if (enemy.isBoss && !enemy.halfHpTriggered && enemy.hp <= enemy.maxHp * BOSS_STRUGGLE_HP_RATIO) {
+    enemy.halfHpTriggered = true;
+    log(`【異變】${enemy.name}的生命降至一半以下，體內殘存的意識開始劇烈甦醒！（掙扎機率提升至 ${Math.round(BOSS_STRUGGLE_CHANCE_LOW_HP * 100)}%）`, "text-curse");
+  }
+
+  // 二階段真魔王半血顯露真名「文字.沙坦」並進入狂暴狀態（未計算前的攻擊力 ×1.5）
+  if (enemy.isPhase2Boss && !enemy.halfHpTriggered && enemy.hp <= enemy.maxHp * PHASE2_BOSS_RAGE_HP_RATIO) {
+    enemy.halfHpTriggered = true;
+    enemy.name = enemy.trueName || PHASE2_BOSS_TRUE_NAME;
+    enemy.inRage = true;
+    enemy.physAtk = Math.floor(enemy.physAtk * PHASE2_BOSS_RAGE_MULT);
+    enemy.magAtk = Math.floor(enemy.magAtk * PHASE2_BOSS_RAGE_MULT);
+    log(`【真名顯露】隨着重創，真魔王身上的亂碼屏障碎裂，露出了它的真名——「${enemy.name}」！`, "big");
+    log(`勇者：「原來魔王的名字叫${enemy.name}….」`, "hit");
+    log(`${enemy.name}：「竟然被你看見了...那麼你就非死不可了！！」`, "text-curse");
+    log(`【狂暴】${enemy.name}進入狂暴狀態！物理與魔法攻擊力提升為 1.5 倍（物攻 ${enemy.physAtk}／魔攻 ${enemy.magAtk}）！`, "text-curse");
+    renderStatus();
+  }
 
   await enemyAttack();
-  if (hero.hp <= 0) return;
+  if (!enemy || hero.hp <= 0) return;
 
-  // 渾沌怪每回合結束後動態切換排斥弱點
-  if (enemy.type === "chaos") {
+  // 渾沌怪每回合結束後動態切換排斥弱點（二階段真魔王不減半防禦）
+  if (enemy.type === "chaos" && !enemy.isPhase2Boss) {
     refreshChaosWeakness(true);
   }
   renderStatus();
@@ -580,7 +708,26 @@ async function heroAttack(atkType) {
 }
 
 async function enemyAttack() {
-  const s = calcStats(HERO_BASE, hero.equip);
+  // 一階段魔王意識掙扎判定（初期 15%，生命 <= 50% 時提升至 40%）
+  if (enemy.isBoss) {
+    const struggleChance = (enemy.hp <= enemy.maxHp * BOSS_STRUGGLE_HP_RATIO)
+      ? BOSS_STRUGGLE_CHANCE_LOW_HP
+      : BOSS_STRUGGLE_CHANCE_BASE;
+    if (Math.random() < struggleChance) {
+      if (Math.random() < 0.5) {
+        log(`【掙扎】${enemy.name}體內的殘存意識突然反抗，痛苦地抱住頭顱，攻擊揮空沒有造成傷害！`, "text-curse");
+      } else {
+        enemy.hp = Math.max(0, enemy.hp - BOSS_STRUGGLE_SELF_DMG);
+        log(`【掙扎】${enemy.name}體內的意識劇烈衝突，強行壓制失控的力量，反噬自身 ${BOSS_STRUGGLE_SELF_DMG} 點生命！${enemy.name}剩下生命 ${enemy.hp}、護盾 ${enemy.shield}。`, "text-curse");
+      }
+      renderStatus();
+      await sleep(HIT_MS);
+      if (enemy.hp <= 0) winBattle();
+      return;
+    }
+  }
+
+  const s = calcStats(HERO_BASE, hero.equip, true);
   let atkType = "phys";
   if (enemy.type === "mag") {
     atkType = "mag";
@@ -600,7 +747,35 @@ async function enemyAttack() {
 
   const target = { shield: hero.shield, hp: hero.hp };
   const hpBefore = hero.hp;
-  log(dealDamage(enemy.name, atkType, atkVal, defVal, target, "勇者", dice), "hurt");
+  const dmgMsg = dealDamage(enemy.name, atkType, atkVal, defVal, target, "勇者", dice);
+
+  // 檢查是否觸發飾品【勇者之劍】殘魂免疫致命傷（最多 3 次，鎖 1 血）
+  const acc = hero.equip.accessory;
+  if (target.hp <= 0 && acc && acc.isHeroSword && acc.blocksLeft > 0) {
+    acc.blocksLeft--;
+    hero.shield = 0;
+    hero.hp = 1; // 保留 1 點生命（鎖 1 血）
+    log(dmgMsg, "hurt");
+    renderStatus();
+
+    // 觸發「受到攻擊後生命值沒有減少」的視覺特效（面板周圍閃金光）
+    await heroHitAnim(false);
+
+    // 畫面變暗並在中心顯示文字消失效果
+    if (acc.blocksLeft > 0) {
+      log("勇者之劍裏的殘魂突然出現，爲勇者擋下了致命一擊。勇者的殘魂變弱了一分。（勇者保留 1 點生命）", "hit");
+      renderStatus();
+      await playStorySequence([HERO_SWORD_BLOCK_TEXT]);
+    } else {
+      log("勇者之劍裏的殘魂拼盡最後一份力爲勇者擋下致命一擊。勇者的殘魂消失了...（勇者保留 1 點生命）", "hit");
+      log(`${enemy.name}：「（邪笑）看你還有甚麼手段抵擋我」`, "text-curse");
+      renderStatus();
+      await playStorySequence([HERO_SWORD_BLOCK_TEXT, HERO_SWORD_VANISH_TEXT]);
+    }
+    return;
+  }
+
+  log(dmgMsg, "hurt");
   hero.shield = target.shield;
   hero.hp = target.hp;
   renderStatus();
@@ -609,18 +784,67 @@ async function enemyAttack() {
   if (hero.hp <= 0) loseGame();
 }
 
-function winBattle() {
+async function winBattle() {
+  // 一階段魔王被擊敗：判斷是否為「完全徒手通關彩蛋」或「進入二階段精神世界」
   if (enemy.isBoss) {
-    log("文字魔王倒下了！束縛大地的文字詛咒隨之瓦解，萬物重新恢復了血肉與生機。", "big");
-    log(`【勝利】你成功突破全部 ${MAX_FLOOR} 層，討伐了文字魔王！`, "big");
     enemy = null;
+    setChoices([]);
     renderStatus();
+
+    // 隱藏彩蛋：全程未穿戴任何文字裝備（完全徒手／初始狀態）
+    if (isCompletelyUnarmed()) {
+      log("【隱藏彩蛋】你全程沒有借助任何文字裝備的力量，以純粹的血肉之軀擊倒了前代勇者！", "big");
+      for (const line of UNARMED_EGG_TEXTS) {
+        log(line, "hit");
+      }
+      await playStorySequence(UNARMED_EGG_TEXTS);
+      log("【特殊完勝結局：純粹血肉之奇蹟】你連精神世界的心魔都無從誕生，徹底粉碎了文字魔王的詛咒！", "big");
+      setChoices([
+        { label: "再玩一次", action: () => { newGame(); playStartText(); } },
+        { label: "返回標題畫面", action: goTitle },
+      ]);
+      return;
+    }
+
+    // 正常路線：前勇者恢復意識託付遺物【勇者之劍】（飾品欄），補滿血並以文字消失效果演出過場，隨後進入二階段
+    const swordItem = { ...HERO_SWORD_ITEM };
+    hero.equip.accessory = swordItem;
+    hero.hp = hero.maxHp; // 拿到勇者之劍第一次補滿血
+    sep();
+    log("文字魔王倒下了……他身上的文字枷鎖出現裂痕，前勇者暫時恢復了意識。", "big");
+    log(`你獲得了前勇者的遺物飾品：【${swordItem.name}】（${swordItem.desc}）！勇者生命完全恢復（${hero.hp} / ${hero.maxHp}）！`, "hit");
+    for (const line of PHASE1_CLEAR_TEXTS) {
+      log(line, "text-curse");
+    }
+    renderStatus();
+
+    await playStorySequence(PHASE1_CLEAR_TEXTS);
+
+    sep();
+    log("── 意識墜入精神世界，二階段真魔王降臨！", "big");
+    await bossAppearAnim();
+    await startBattle(PHASE2_BOSS);
+    return;
+  }
+
+  // 二階段真魔王（文字.沙坦）被擊敗：演出 4 句勝利結局文字消失動畫
+  if (enemy.isPhase2Boss) {
+    enemy = null;
+    setChoices([]);
+    renderStatus();
+    sep();
+    for (const line of PHASE2_VICTORY_TEXTS) {
+      log(line, "big");
+    }
+    await playStorySequence(PHASE2_VICTORY_TEXTS);
+    log(`【勝利結局：血肉重鑄】你成功擊潰真魔王「${PHASE2_BOSS_TRUE_NAME}」，奪回血肉之身並拯救了村落！`, "big");
     setChoices([
       { label: "再玩一次", action: () => { newGame(); playStartText(); } },
       { label: "返回標題畫面", action: goTitle },
     ]);
     return;
   }
+
   log(`你打倒了${enemy.name}！`, "big");
   const drop = randomPick(enemy.items);
   log(`${enemy.name}掉落了一件${SLOT_NAME[drop.slot]}：${itemText(drop)}。`);
@@ -631,12 +855,18 @@ function winBattle() {
 function loseGame() {
   gameOver = true;
   hero.hp = 0;
-  log(`勇者倒下了……被${enemy.name}擊敗，意識逐漸被冰冷的文字吞噬。`, "big");
-  log(`【遊戲結束】止步於第 ${floor} 層第 ${round} 回合。`, "big");
+  const wasPhase2 = enemy && enemy.isPhase2Boss;
+  const killerName = enemy ? enemy.name : "魔王";
+  log(`勇者倒下了……被${killerName}擊敗，意識逐漸被冰冷的文字吞噬。`, "big");
+  if (wasPhase2) {
+    log("【敗北結局：文字魔王】你的意識被徹底吞噬，肉身化為冰冷文字，成為王座上靜候下一位挑戰者的新任文字魔王……", "text-curse");
+  } else {
+    log(`【遊戲結束】止步於第 ${floor} 層第 ${round} 回合。`, "big");
+  }
   enemy = null;
   renderStatus();
   setChoices([]);
-  playDefeatText();
+  playDefeatText(wasPhase2 ? PHASE2_DEFEAT_TEXTS : [DEFEAT_TEXT]);
 }
 
 /* =========================================================

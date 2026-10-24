@@ -71,13 +71,21 @@ body {
   text-align: left;
   cursor: pointer;
 }
-#choices button:hover,
-#choices button:focus-visible { background: #e8e8e8; color: #000; outline: none; }
-
-/* 名字上色；按鈕反白時改回黑字，避免看不清 */
+/* 名字上色；只有真正有滑鼠的裝置（電腦）才觸發 hover 反白，避免手機觸控殘留白底黑字 */
 .name-boss { font-weight: bold; }
-#choices button:hover .name, #choices button:focus-visible .name,
-.menu button:hover .name { color: inherit !important; }
+@media (hover: hover) and (pointer: fine) {
+  #choices button:hover,
+  #choices button:focus-visible { background: #e8e8e8; color: #000; outline: none; }
+  #choices button:hover .name,
+  #choices button:focus-visible .name,
+  .menu button:hover .name,
+  .menu button:focus-visible .name { color: inherit !important; }
+}
+
+/* 手機與電腦按住按鈕瞬間（active）：深灰底色，保留怪物名字原本顏色 */
+#choices button:active,
+.menu button:active,
+#intro-screen .menu button:active { background: #262626; color: #e8e8e8; outline: none; }
 
 @media (max-width: 480px) {
   body { font-size: 15px; }
@@ -110,7 +118,9 @@ body {
   background: #000; color: #e8e8e8; border: 1px solid #e8e8e8;
   font-family: inherit; font-size: 18px; padding: 14px; cursor: pointer;
 }
-.menu button:hover, .menu button:focus-visible { background: #e8e8e8; color: #000; outline: none; }
+@media (hover: hover) and (pointer: fine) {
+  .menu button:hover, .menu button:focus-visible { background: #e8e8e8; color: #000; outline: none; }
+}
 #intro-screen .box { flex: 1; overflow-y: auto; border: 1px solid #555; padding: 14px 16px; }
 #intro-screen h2 { font-size: 18px; margin: 4px 0 8px; letter-spacing: 2px; }
 #intro-screen h2:not(:first-child) { margin-top: 18px; }
@@ -223,11 +233,11 @@ body {
 }
 #story.show { display: flex; }
 #story .text {
-  font-size: 30px; font-weight: bold; letter-spacing: 6px; color: #fff;
+  font-size: 26px; font-weight: bold; letter-spacing: 3px; line-height: 1.6; max-width: 700px; color: #fff;
   text-align: center; padding: 0 16px; opacity: 0;
   text-shadow: 0 0 12px rgba(255,255,255,0.35);
 }
-@media (max-width: 480px) { #story .text { font-size: 24px; letter-spacing: 4px; } }
+@media (max-width: 480px) { #story .text { font-size: 20px; letter-spacing: 2px; } }
 
 /* ===== 轉場動畫：畫面淡出 → 掃描線掃過 → 新畫面淡入 ===== */
 #fade {

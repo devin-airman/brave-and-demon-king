@@ -13,7 +13,7 @@ const FLOORS = [
 ];
 
 // 1–5 層怪物與攜帶裝備設定表（怪物除生命外，所有攻防護盾數值皆來自攜帶裝備）
-// slot 分為：physWeapon (物理武器)、magWeapon (魔法武器)、armor (雙防裝甲)、shield (護盾)
+// slot 分為：physWeapon (物理武器)、magWeapon (魔法武器)、armor (雙防裝甲)、shield (護盾)、accessory (飾品)
 const FLOOR_MONSTERS = {
   1: [
     {
@@ -180,12 +180,12 @@ const FLOOR_CHEST_ITEMS = {
   ],
 };
 
-// 第 5 層終局魔王設定（《勇者與魔王_全樓層怪物與裝備數值表.xlsx》）
+// 第 5 層一階段魔王設定（《勇者與魔王_全樓層怪物與裝備數值表.xlsx》）
 const BOSS = {
   name: "文字魔王",
-  fullTitle: "文字魔王",
+  fullTitle: "文字魔王（前代勇者殘軀）",
   type: "chaos",
-  typeLabel: "",
+  typeLabel: "魔王",
   hp: 110,
   isBoss: true,
   items: [
@@ -194,4 +194,24 @@ const BOSS = {
     { slot: "armor", name: "破碎文字枷鎖鎧", physDef: 26, magDef: 26, textDesc: "【前勇者的遺物】被無數文字生生烙印在肉身骨髓的束縛重甲，無法脫卸。" },
     { slot: "shield", name: "苦痛抗爭之盾", shield: 20, textDesc: "【前勇者的遺物】殘留著前代勇者微弱抗爭意識的盾牌，偶爾發出哀鳴。" },
   ],
+};
+
+// 擊敗一階段魔王後獲得之特殊遺物飾品【勇者之劍】（非文字裝備，不會被二階段真魔王複製）
+const HERO_SWORD_ITEM = {
+  slot: "accessory",
+  name: "勇者之劍",
+  isHeroSword: true,
+  atkMult: HERO_SWORD_ATK_MULT,
+  blocksLeft: HERO_SWORD_MAX_BLOCKS,
+  desc: "前代勇者託付的非文字遺物。對屬於這裏的怪物攻擊力 ×1.5，首次取得補滿生命，並由劍中殘魂替勇者擋下最多 3 次致命傷（鎖 1 血）。",
+};
+
+// 第 5 層二階段真魔王設定（精神世界心魔，除生命與飾品外 1:1 複製勇者基礎數值與 4 件文字裝備，不減半防禦）
+const PHASE2_BOSS = {
+  name: PHASE2_BOSS_HIDDEN_NAME,
+  trueName: PHASE2_BOSS_TRUE_NAME,
+  type: "chaos",
+  typeLabel: "真魔王",
+  hp: PHASE2_BOSS_HP,
+  isPhase2Boss: true,
 };
