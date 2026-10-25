@@ -4,6 +4,8 @@
    一階段魔王意識掙扎、二階段真魔王心魔戰、勇者之劍與徒手彩蛋
    ========================================================= */
 let hero, floor, round, turn, floorDeck, enemy, gameOver;
+let gameMode = "dice"; // "dice" (舊版 0–20 骰子模式) 或 "poker" (新版 1–13 撲克模式)
+let lastDrawnCard = null; // 紀錄最近一次抽出的撲克牌資訊（供後續飾品與技能花色連動）
 
 const $status = document.getElementById("status");
 const $log = document.getElementById("log");
@@ -43,6 +45,54 @@ function colorize(html) {
 }
 
 function rollD20() { return Math.floor(Math.random() * 21); } // 0–20
+
+// 從 52 張標準撲克牌（4 花色 × 13 點數，不含鬼牌）隨機洗抽 1 張
+function drawPokerCard() {
+  const suit = POKER_SUITS[Math.floor(Math.random() * POKER_SUITS.length)];
+  const rankObj = POKER_RANKS[Math.floor(Math.random() * POKER_RANKS.length)];
+  return {
+    suit,
+    rank: rankObj.rank,
+    value: rankObj.value,
+    label: `${suit.symbol}${rankObj.rank}`,
+    fullLabel: `${suit.name}${suit.symbol}${rankObj.rank}`,
+  };
+}
+
+// 宮廷人頭牌 (J=騎士、Q=皇后、K=國王) 向量圖騰
+function getCourtSvg(rank) {
+  if (rank === "J") {
+    return `<svg viewBox="0 0 60 90" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 22 L30 10 L42 22 L38 40 L22 40 Z" fill="currentColor" fill-opacity="0.12"/><path d="M22 28 H38 M30 10 V40"/><path d="M14 58 C14 46, 46 46, 46 58 L50 74 H10 Z" fill="currentColor" fill-opacity="0.18"/><path d="M46 14 L46 76 M46 18 L54 24 L46 30"/><circle cx="30" cy="56" r="3" fill="currentColor"/></svg>`;
+  }
+  if (rank === "Q") {
+    return `<svg viewBox="0 0 60 90" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 28 L20 14 L30 24 L40 14 L46 28 Z" fill="currentColor" fill-opacity="0.22"/><circle cx="20" cy="11" r="2" fill="currentColor"/><circle cx="30" cy="10" r="2.5" fill="currentColor"/><circle cx="40" cy="11" r="2" fill="currentColor"/><circle cx="30" cy="39" r="9" fill="currentColor" fill-opacity="0.1"/><path d="M13 74 C15 54, 45 54, 47 74 Z" fill="currentColor" fill-opacity="0.18"/><path d="M22 54 L30 64 L38 54"/><circle cx="47" cy="44" r="4.5" fill="currentColor" fill-opacity="0.25"/><path d="M47 49 V72"/></svg>`;
+  }
+  return `<svg viewBox="0 0 60 90" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 28 L16 12 L25 22 L30 10 L35 22 L44 12 L48 28 Z" fill="currentColor" fill-opacity="0.25"/><path d="M30 5 V10 M27 7 H33"/><rect x="19" y="30" width="22" height="16" rx="4" fill="currentColor" fill-opacity="0.1"/><path d="M23 42 L30 48 L37 42"/><path d="M11 75 C13 52, 47 52, 49 75 Z" fill="currentColor" fill-opacity="0.2"/><path d="M16 18 L44 72 M12 24 L22 16"/><circle cx="30" cy="60" r="3" fill="currentColor"/></svg>`;
+}
+
+function renderCardBackHtml() {
+  return `<div class="poker-card-back"><div class="card-back-inner"><div class="card-back-emblem"><span>勇✦魔</span></div></div></div>`;
+}
+
+function renderPokerCardHtml(card) {
+  const val = card.value;
+  const r = card.rank;
+  const s = card.suit.symbol;
+  let centerContent = "";
+  if (val === 1) {
+    centerContent = `<div class="pip-ace">${s}</div>`;
+  } else if (val >= 2 && val <= 10) {
+    const coords = POKER_PIP_LAYOUTS[val] || [];
+    const denseClass = val >= 9 ? "dense" : "";
+    const pipsHtml = coords.map(([x, y, inv]) =>
+      `<span class="pip${inv ? " inv" : ""}" style="left:${x}%; top:${y}%;">${s}</span>`
+    ).join("");
+    centerContent = `<div class="pip-grid ${denseClass}">${pipsHtml}</div>`;
+  } else {
+    centerContent = `<div class="court-box"><span class="court-suit-tl">${s}</span>${getCourtSvg(r)}<span class="court-watermark">${r}=${val}</span><span class="court-suit-br">${s}</span></div>`;
+  }
+  return `<div class="poker-card ${card.suit.colorClass}"><div class="card-corner top-left"><span class="corner-rank">${r}</span><span class="corner-suit">${s}</span></div><div class="card-center">${centerContent}</div><div class="card-corner bottom-right"><span class="corner-rank">${r}</span><span class="corner-suit">${s}</span></div></div>`;
+}
 function randomPick(list) { return list[Math.floor(Math.random() * list.length)]; }
 function weightedPick(list) {
   const total = list.reduce((s, x) => s + x.weight, 0);
@@ -131,9 +181,10 @@ function renderStatus() {
   const s = calcStats(HERO_BASE, hero.equip, true);
   const curShield = enemy ? hero.shield : s.shield;
   const fInfo = getFloorInfo(floor);
+  const modeTag = gameMode === "poker" ? "［撲克模式］" : "［骰子模式］";
   const stageTitle = (enemy && enemy.isPhase2Boss)
-    ? `勇者　精神世界【心魔決戰】`
-    : `勇者　第 ${floor} 層【${fInfo.name}】　第 ${round} / ${ROUNDS_PER_FLOOR} 回合`;
+    ? `勇者${modeTag}　精神世界【心魔決戰】`
+    : `勇者${modeTag}　第 ${floor} 層【${fInfo.name}】　第 ${round} / ${ROUNDS_PER_FLOOR} 回合`;
   const deckText = floorDeck && floorDeck.length > 0
     ? floorDeck.map(c => cardTypeName(c.type)).join("、")
     : (round === ROUNDS_PER_FLOOR ? (floor < MAX_FLOOR ? "【傳送門 + 寶箱】" : "【終局魔王戰】") : "無");
@@ -165,7 +216,58 @@ function renderStatus() {
 
 /* ===== 擲骰與戰鬥效果動畫 ===== */
 const $dice = document.getElementById("dice");
+const $pokerDraw = document.getElementById("poker-draw");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// 初始化撲克牌背 DOM
+if ($pokerDraw) {
+  $pokerDraw.querySelectorAll(".deck-card, .drawn-face.back").forEach(el => {
+    el.innerHTML = renderCardBackHtml();
+  });
+}
+
+async function rollPokerAnim(who, color, card, note) {
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $who = $pokerDraw.querySelector(".who");
+  const $stage = $pokerDraw.querySelector(".stage-label");
+  const $deckStack = $pokerDraw.querySelector(".deck-stack");
+  const $drawnWrap = $pokerDraw.querySelector(".drawn-card-wrapper");
+  const $drawnFront = $pokerDraw.querySelector(".drawn-face.front");
+  const $badge = $pokerDraw.querySelector(".value-badge");
+  const $note = $pokerDraw.querySelector(".note");
+
+  $who.innerHTML = colorize(escapeHtml(who)) + " 抽撲克牌";
+  $who.style.color = color || "#e8e8e8";
+  $note.innerHTML = colorize(escapeHtml(note || ""));
+  $badge.textContent = "";
+  $drawnFront.innerHTML = renderPokerCardHtml(card);
+  $drawnWrap.style.setProperty("--poker-draw-ms", POKER_DRAW_MS + "ms");
+  $drawnWrap.className = "drawn-card-wrapper";
+
+  $pokerDraw.classList.add("show");
+  if (!reduce) {
+    $stage.textContent = "正在洗牌...";
+    $deckStack.className = "deck-stack shuffling";
+    await sleep(POKER_SHUFFLE_MS);
+
+    $stage.textContent = "抽出撲克牌！";
+    $deckStack.className = "deck-stack recede";
+    $drawnWrap.className = "drawn-card-wrapper drawing";
+    await sleep(POKER_DRAW_MS);
+  } else {
+    $deckStack.className = "deck-stack recede";
+  }
+
+  $drawnWrap.className = "drawn-card-wrapper landed";
+  const isLetter = (card.rank === "A" || card.rank === "J" || card.rank === "Q" || card.rank === "K");
+  const hint = isLetter ? `（${card.rank} 代表數字 ${card.value}）` : `（點數 ${card.value}）`;
+  $stage.textContent = "抽牌結果";
+  $badge.textContent = `抽中：${card.suit.name} ${card.label} ${hint}`;
+
+  await sleep(POKER_HOLD_MS);
+  $pokerDraw.classList.remove("show");
+  await sleep(120);
+}
 
 async function rollDiceAnim(who, color, result, note) {
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -335,7 +437,11 @@ function drawFromDeck(deck, count) {
   return indices.slice(0, Math.min(count, deck.length)).map(i => deck[i]);
 }
 
-function newGame() {
+function newGame(selectedMode) {
+  if (selectedMode === "dice" || selectedMode === "poker") {
+    gameMode = selectedMode;
+  }
+  lastDrawnCard = null;
   hero = {
     hp: HERO_BASE.hp,
     maxHp: HERO_BASE.hp,
@@ -350,7 +456,10 @@ function newGame() {
   floorDeck = buildFloorDeck(floor);
 
   $log.innerHTML = "";
-  log("【勇者與魔王】", "big");
+  const modeTitle = gameMode === "poker"
+    ? "【撲克模式】"
+    : "【骰子模式】";
+  log(`【勇者與魔王】${modeTitle}`, "big");
   log("你踏入被文字魔王侵蝕的領域。每層共有 6 個回合，擊敗怪物穿戴文字裝備，邁向第五層的原典王座。");
   const fInfo = getFloorInfo(floor);
   log(`── 進入第 ${floor} 層【${fInfo.name}】：${fInfo.desc}`, "big");
@@ -613,22 +722,37 @@ async function startBattle(template) {
   }
   renderStatus();
 
-  // 擲骰決定先攻：單數勇者先、雙數對手先
-  const r = rollD20();
-  await rollDiceAnim("先攻判定", null, r, "單數＝勇者先攻／雙數＝" + enemy.name + "先攻");
-  if (r % 2 === 1) {
-    log(`先攻骰：${r}（單數），勇者先攻。`);
+  // 決定先攻：單數勇者先、雙數對手先（依模式使用 0–20 擲骰或 A–K 抽撲克牌）
+  let r;
+  if (gameMode === "poker") {
+    const card = drawPokerCard();
+    lastDrawnCard = card;
+    r = card.value;
+    await rollPokerAnim("先攻判定", null, card, "單數(A,3,5,7,9,J,K)＝勇者先攻／雙數＝" + enemy.name + "先攻");
+    if (r % 2 === 1) {
+      log(`先攻抽牌：${card.fullLabel}（代表點數 ${r}，單數），勇者先攻。`);
+    } else {
+      log(`先攻抽牌：${card.fullLabel}（代表點數 ${r}，雙數），${enemy.name}先攻。`);
+      await enemyAttack();
+      if (!enemy || hero.hp <= 0) return;
+    }
   } else {
-    log(`先攻骰：${r}（雙數），${enemy.name}先攻。`);
-    await enemyAttack();
-    if (!enemy || hero.hp <= 0) return;
+    r = rollD20();
+    await rollDiceAnim("先攻判定", null, r, "單數＝勇者先攻／雙數＝" + enemy.name + "先攻");
+    if (r % 2 === 1) {
+      log(`先攻骰：${r}（單數），勇者先攻。`);
+    } else {
+      log(`先攻骰：${r}（雙數），${enemy.name}先攻。`);
+      await enemyAttack();
+      if (!enemy || hero.hp <= 0) return;
+    }
   }
   renderStatus();
   showCombatButtons();
 }
 
 // 計算並套用傷害：先扣護盾，再扣生命
-function dealDamage(attackerName, atkType, atk, def, target, targetName, dice) {
+function dealDamage(attackerName, atkType, atk, def, target, targetName, dice, cardInfo) {
   const atkLabel = atkType === "mag" ? "魔法攻擊" : "物理攻擊";
   const defLabel = atkType === "mag" ? "魔防" : "物防";
   const dmg = Math.max(0, atk + dice - def);
@@ -637,7 +761,10 @@ function dealDamage(attackerName, atkType, atk, def, target, targetName, dice) {
   target.shield -= toShield;
   target.hp -= toHp;
 
-  let msg = `${attackerName}發動${atkLabel}：${atk} + 骰子 ${dice} − ${defLabel} ${def} = ${dmg} 傷害`;
+  const rollExpr = cardInfo
+    ? `撲克 ${dice}（${cardInfo.label}）`
+    : `骰子 ${dice}`;
+  let msg = `${attackerName}發動${atkLabel}：${atk} + ${rollExpr} − ${defLabel} ${def} = ${dmg} 傷害`;
   if (dmg > 0) {
     const parts = [];
     if (toShield > 0) parts.push(`護盾 −${toShield}`);
@@ -654,16 +781,25 @@ async function heroAttack(atkType) {
   const isMag = atkType === "mag";
   const atkVal = isMag ? s.magAtk : s.physAtk;
   const defVal = isMag ? enemy.curMagDef : enemy.curPhysDef;
+  const rollWord = gameMode === "poker" ? "撲克" : "骰子";
   const labelNote = isMag
-    ? `魔攻 ${atkVal} + 骰子 − 魔防 ${defVal}`
-    : `物攻 ${atkVal} + 骰子 − 物防 ${defVal}`;
+    ? `魔攻 ${atkVal} + ${rollWord} − 魔防 ${defVal}`
+    : `物攻 ${atkVal} + ${rollWord} − 物防 ${defVal}`;
 
-  const dice = rollD20();
-  await rollDiceAnim("勇者", HERO_COLOR, dice, labelNote);
+  let dice, drawnCard = null;
+  if (gameMode === "poker") {
+    drawnCard = drawPokerCard();
+    lastDrawnCard = drawnCard;
+    dice = drawnCard.value;
+    await rollPokerAnim("勇者", HERO_COLOR, drawnCard, labelNote);
+  } else {
+    dice = rollD20();
+    await rollDiceAnim("勇者", HERO_COLOR, dice, labelNote);
+  }
   await swordAnim();
 
   const heroTarget = { shield: enemy.shield, hp: enemy.hp };
-  log(dealDamage("勇者", atkType, atkVal, defVal, heroTarget, enemy.name, dice), "hit");
+  log(dealDamage("勇者", atkType, atkVal, defVal, heroTarget, enemy.name, dice, drawnCard), "hit");
   enemy.shield = heroTarget.shield;
   enemy.hp = heroTarget.hp;
   renderStatus();
@@ -738,16 +874,25 @@ async function enemyAttack() {
   const isMag = atkType === "mag";
   const atkVal = isMag ? enemy.magAtk : enemy.physAtk;
   const defVal = isMag ? s.magDef : s.physDef;
+  const rollWord = gameMode === "poker" ? "撲克" : "骰子";
   const labelNote = isMag
-    ? `魔法攻擊 ${atkVal} + 骰子 − 勇者魔防 ${defVal}`
-    : `物理攻擊 ${atkVal} + 骰子 − 勇者物防 ${defVal}`;
+    ? `魔法攻擊 ${atkVal} + ${rollWord} − 勇者魔防 ${defVal}`
+    : `物理攻擊 ${atkVal} + ${rollWord} − 勇者物防 ${defVal}`;
 
-  const dice = rollD20();
-  await rollDiceAnim(enemy.name, ENEMY_COLORS[enemy.name], dice, labelNote);
+  let dice, drawnCard = null;
+  if (gameMode === "poker") {
+    drawnCard = drawPokerCard();
+    lastDrawnCard = drawnCard;
+    dice = drawnCard.value;
+    await rollPokerAnim(enemy.name, ENEMY_COLORS[enemy.name], drawnCard, labelNote);
+  } else {
+    dice = rollD20();
+    await rollDiceAnim(enemy.name, ENEMY_COLORS[enemy.name], dice, labelNote);
+  }
 
   const target = { shield: hero.shield, hp: hero.hp };
   const hpBefore = hero.hp;
-  const dmgMsg = dealDamage(enemy.name, atkType, atkVal, defVal, target, "勇者", dice);
+  const dmgMsg = dealDamage(enemy.name, atkType, atkVal, defVal, target, "勇者", dice, drawnCard);
 
   // 檢查是否觸發飾品【勇者之劍】殘魂免疫致命傷（最多 3 次，鎖 1 血）
   const acc = hero.equip.accessory;
@@ -800,7 +945,7 @@ async function winBattle() {
       await playStorySequence(UNARMED_EGG_TEXTS);
       log("【特殊完勝結局：純粹血肉之奇蹟】你連精神世界的心魔都無從誕生，徹底粉碎了文字魔王的詛咒！", "big");
       setChoices([
-        { label: "再玩一次", action: () => { newGame(); playStartText(); } },
+        { label: "再玩一次", action: showReplayModeChoices },
         { label: "返回標題畫面", action: goTitle },
       ]);
       return;
@@ -839,7 +984,7 @@ async function winBattle() {
     await playStorySequence(PHASE2_VICTORY_TEXTS);
     log(`【勝利結局：血肉重鑄】你成功擊潰真魔王「${PHASE2_BOSS_TRUE_NAME}」，奪回血肉之身並拯救了村落！`, "big");
     setChoices([
-      { label: "再玩一次", action: () => { newGame(); playStartText(); } },
+      { label: "再玩一次", action: showReplayModeChoices },
       { label: "返回標題畫面", action: goTitle },
     ]);
     return;
@@ -910,11 +1055,50 @@ function showScreen(target, beforeShow) {
   }, Math.max(FADE_MS, SCAN_MS));
 }
 
-function goTitle() { showScreen($title); }
-function goIntro() { showScreen($intro, () => { document.getElementById("intro-box").scrollTop = 0; }); }
-function goGame() { showScreen($game, () => { newGame(); playStartText(); }); }
+const $titleMainMenu = document.getElementById("title-main-menu");
+const $titleModeMenu = document.getElementById("title-mode-menu");
 
-document.getElementById("btn-start").onclick = goGame;
+function resetTitleMenu() {
+  if ($titleMainMenu && $titleModeMenu) {
+    $titleMainMenu.classList.remove("hidden");
+    $titleModeMenu.classList.add("hidden");
+  }
+}
+
+function openTitleModeSelect() {
+  if ($titleMainMenu && $titleModeMenu) {
+    $titleMainMenu.classList.add("hidden");
+    $titleModeMenu.classList.remove("hidden");
+  }
+}
+
+// 通關後按下「再玩一次」時，顯示兩個模式按鈕供玩家選擇
+function showReplayModeChoices() {
+  log(MODE_PROMPT_TEXT, "big");
+  setChoices([
+    { label: MODE_DICE_BTN_TEXT, action: () => { newGame("dice"); playStartText(); } },
+    { label: MODE_POKER_BTN_TEXT, action: () => { newGame("poker"); playStartText(); } },
+    { label: "返回標題畫面", action: goTitle },
+  ]);
+}
+
+function goTitle() { showScreen($title, resetTitleMenu); }
+function goIntro() { showScreen($intro, () => { document.getElementById("intro-box").scrollTop = 0; }); }
+function goGameWithMode(selectedMode) {
+  showScreen($game, () => {
+    resetTitleMenu();
+    newGame(selectedMode);
+    playStartText();
+  });
+}
+
+// 標題畫面按下「開始遊戲」：展開【骰子模式（舊版本）】與【撲克模式（新版本）】兩個按鈕
+document.getElementById("btn-start").onclick = openTitleModeSelect;
+document.getElementById("btn-mode-dice").onclick = () => goGameWithMode("dice");
+document.getElementById("btn-mode-poker").onclick = () => goGameWithMode("poker");
+document.getElementById("btn-mode-back").onclick = resetTitleMenu;
+
 document.getElementById("btn-intro").onclick = goIntro;
 document.getElementById("btn-back").onclick = goTitle;
-document.getElementById("btn-intro-start").onclick = goGame;
+// 介紹畫面按下「開始遊戲」：切換回標題畫面並直接展開雙模式選擇按鈕
+document.getElementById("btn-intro-start").onclick = () => showScreen($title, openTitleModeSelect);

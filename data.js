@@ -215,3 +215,42 @@ const PHASE2_BOSS = {
   hp: PHASE2_BOSS_HP,
   isPhase2Boss: true,
 };
+
+
+// 第五版新增：52 張標準撲克牌設定（不含鬼牌，A=1, 2–10, J=11, Q=12, K=13）
+// 供「撲克模式」洗牌抽牌動畫與後續「飾品／技能花色效果」連動使用
+const POKER_SUITS = [
+  { key: "S", symbol: "♠", name: "黑桃", colorClass: "is-black" },
+  { key: "H", symbol: "♥", name: "紅心", colorClass: "is-red" },
+  { key: "D", symbol: "♦", name: "方塊", colorClass: "is-red" },
+  { key: "C", symbol: "♣", name: "梅花", colorClass: "is-black" },
+];
+
+const POKER_RANKS = [
+  { rank: "A",  value: 1 },
+  { rank: "2",  value: 2 },
+  { rank: "3",  value: 3 },
+  { rank: "4",  value: 4 },
+  { rank: "5",  value: 5 },
+  { rank: "6",  value: 6 },
+  { rank: "7",  value: 7 },
+  { rank: "8",  value: 8 },
+  { rank: "9",  value: 9 },
+  { rank: "10", value: 10 },
+  { rank: "J",  value: 11 },
+  { rank: "Q",  value: 12 },
+  { rank: "K",  value: 13 },
+];
+
+// 標準撲克牌 2～10 點數的花色座標 (x%, y%, 是否 180 度倒置)
+const POKER_PIP_LAYOUTS = {
+  2: [[50, 18, false], [50, 82, true]],
+  3: [[50, 16, false], [50, 50, false], [50, 84, true]],
+  4: [[28, 18, false], [72, 18, false], [28, 82, true], [72, 82, true]],
+  5: [[28, 18, false], [72, 18, false], [50, 50, false], [28, 82, true], [72, 82, true]],
+  6: [[28, 16, false], [72, 16, false], [28, 50, false], [72, 50, false], [28, 84, true], [72, 84, true]],
+  7: [[28, 16, false], [72, 16, false], [50, 33, false], [28, 50, false], [72, 50, false], [28, 84, true], [72, 84, true]],
+  8: [[28, 16, false], [72, 16, false], [50, 33, false], [28, 50, false], [72, 50, false], [50, 67, true], [28, 84, true], [72, 84, true]],
+  9: [[26, 14, false], [74, 14, false], [26, 38, false], [74, 38, false], [50, 50, false], [26, 62, true], [74, 62, true], [26, 86, true], [74, 86, true]],
+  10: [[26, 14, false], [74, 14, false], [50, 26, false], [26, 38, false], [74, 38, false], [26, 62, true], [74, 62, true], [50, 74, true], [26, 86, true], [74, 86, true]],
+};

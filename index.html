@@ -12,9 +12,15 @@
   <div class="logo" id="title-logo"></div>
   <div class="sub" id="title-sub"></div>
   <div class="sub"><span class="cursor">▌</span></div>
-  <div class="menu">
+  <div class="menu" id="title-main-menu">
     <button id="btn-start">開始遊戲</button>
     <button id="btn-intro">遊戲介紹</button>
+  </div>
+  <div class="menu hidden" id="title-mode-menu">
+    <div class="mode-prompt" id="mode-prompt-title">請選擇本局遊戲模式：</div>
+    <button id="btn-mode-dice">骰子模式</button>
+    <button id="btn-mode-poker">撲克模式</button>
+    <button id="btn-mode-back">返回</button>
   </div>
 </div>
 
@@ -27,11 +33,33 @@
   </div>
 </div>
 
-<!-- 擲骰動畫 -->
+<!-- 擲骰動畫（骰子模式） -->
 <div id="dice" aria-live="polite">
   <div class="dice-box">
     <div class="who"></div>
     <div class="face">0</div>
+    <div class="note"></div>
+  </div>
+</div>
+
+<!-- 抽撲克牌動畫（撲克模式：先洗牌後抽一張牌翻開） -->
+<div id="poker-draw" aria-live="polite">
+  <div class="poker-box">
+    <div class="who"></div>
+    <div class="stage-label"></div>
+    <div class="card-stage">
+      <div class="deck-stack">
+        <div class="deck-card"></div>
+        <div class="deck-card"></div>
+        <div class="deck-card"></div>
+        <div class="deck-card"></div>
+      </div>
+      <div class="drawn-card-wrapper">
+        <div class="drawn-face front"></div>
+        <div class="drawn-face back"></div>
+      </div>
+    </div>
+    <div class="value-badge"></div>
     <div class="note"></div>
   </div>
 </div>
