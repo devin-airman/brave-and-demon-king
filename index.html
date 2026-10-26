@@ -117,6 +117,20 @@
   </div>
 </div>
 
+<!-- 測試者模式視窗（第七版新增：裝備 999 無敵套裝並自由選擇前往樓層） -->
+<div id="tester-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="tester-modal-title">
+  <div class="tester-modal-box">
+    <div class="tester-modal-header">
+      <span id="tester-modal-title">🛠 測試者模式（已穿戴 999 無敵套裝）</span>
+      <button type="button" id="btn-close-tester" class="mini-btn">✕ 關閉</button>
+    </div>
+    <div class="tester-modal-body">
+      <p>已為勇者自動裝備<strong>無敵套裝（物理武器 999、魔法武器 999、物理防禦 999、魔法防禦 999）</strong>並補滿生命！請選擇你要傳送測試的樓層：</p>
+      <div class="tester-floor-list" id="tester-floor-list"></div>
+    </div>
+  </div>
+</div>
+
 <script src="config.js"></script>
 <script src="data.js"></script>
 <script src="game.js"></script>

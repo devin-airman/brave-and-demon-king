@@ -1,8 +1,7 @@
 /* =========================================================
-   遊戲核心狀態與邏輯 (game.js - 第六版 v6 雙模式與終局魔王平衡更新)
-   包含：1–5 層 6 回合爬塔、物/魔雙攻防、可收合 5 格裝備抽屜、
-   勇者與敵人生命/護盾雙動態條與外框微光、頂部拉下／底部收回戰鬥對話框、
-   無前綴雙行戰報、歷史對話視窗、雙模式（骰子／撲克）專屬穿盾與花色機制、
+   遊戲核心狀態與邏輯 (game.js - 第七版 v7)
+   包含：方案 B 標準平衡數值、左上角「測試者」按鈕（999 無敵套裝＋自由選層）、
+   頂部面板「物攻｜物防｜魔攻｜魔防」位置對調、雙模式穿盾與花色加成、
    一階段魔王掙扎／暴走（擊敗前保密前勇者身分）、勇者之劍殘魂燃燒、
    二階段心魔戰（半血前保密真名只顯示 @$+%^&¥，半血後顯露真名文字.沙坦）
    ========================================================= */
@@ -24,6 +23,8 @@ const $battleLog = document.getElementById("battle-log");
 const $choices = document.getElementById("choices");
 const $historyModal = document.getElementById("history-modal");
 const $historyContent = document.getElementById("history-content");
+const $testerModal = document.getElementById("tester-modal");
+const $testerFloorList = document.getElementById("tester-floor-list");
 
 /* ===== 小工具 ===== */
 function escapeHtml(t) {
@@ -145,12 +146,20 @@ function itemText(item) {
 }
 
 // 從基礎數值與裝備計算實際雙攻、雙防與護盾
-// 註：allowAccessory = true 時計算飾品【勇者之劍】的未計算前攻擊力倍率加成；二階段複製時設為 false
+// 註：若穿戴測試者無敵套裝 (isTesterItem)，該項數值固定顯示為 999；allowAccessory = true 時計算飾品【勇者之劍】倍率
 function calcStats(base, equip, allowAccessory = true) {
-  let physAtk = (base.physAtk || 0) + (equip.physWeapon ? equip.physWeapon.physAtk : 0);
-  let magAtk = (base.magAtk || 0) + (equip.magWeapon ? equip.magWeapon.magAtk : 0);
-  const physDef = (base.physDef || 0) + (equip.armor ? equip.armor.physDef : 0);
-  const magDef = (base.magDef || 0) + (equip.armor ? equip.armor.magDef : 0);
+  let physAtk = (equip.physWeapon && equip.physWeapon.isTesterItem)
+    ? TESTER_STAT_VAL
+    : (base.physAtk || 0) + (equip.physWeapon ? equip.physWeapon.physAtk : 0);
+  let magAtk = (equip.magWeapon && equip.magWeapon.isTesterItem)
+    ? TESTER_STAT_VAL
+    : (base.magAtk || 0) + (equip.magWeapon ? equip.magWeapon.magAtk : 0);
+  const physDef = (equip.armor && equip.armor.isTesterItem)
+    ? TESTER_STAT_VAL
+    : (base.physDef || 0) + (equip.armor ? equip.armor.physDef : 0);
+  const magDef = (equip.armor && equip.armor.isTesterItem)
+    ? TESTER_STAT_VAL
+    : (base.magDef || 0) + (equip.armor ? equip.armor.magDef : 0);
   const shield = (base.shield || 0) + (equip.shield ? equip.shield.shield : 0);
 
   if (allowAccessory && equip.accessory && equip.accessory.atkMult && equip.accessory.atkMult > 1) {
@@ -158,6 +167,17 @@ function calcStats(base, equip, allowAccessory = true) {
     magAtk = Math.floor(magAtk * equip.accessory.atkMult);
   }
   return { physAtk, magAtk, physDef, magDef, shield };
+}
+
+// 二階段心魔複製勇者屬性時，若勇者穿戴的是「測試者 999 無敵套裝」，心魔只複製第 5 層標準數值，避免測試時卡死
+function calcMirrorStatsForPhase2(base, equip) {
+  const safeEquip = {
+    physWeapon: (equip.physWeapon && equip.physWeapon.isTesterItem) ? { physAtk: 21 } : equip.physWeapon,
+    magWeapon: (equip.magWeapon && equip.magWeapon.isTesterItem) ? { magAtk: 21 } : equip.magWeapon,
+    armor: (equip.armor && equip.armor.isTesterItem) ? { physDef: 20, magDef: 20 } : equip.armor,
+    shield: equip.shield,
+  };
+  return calcStats(base, safeEquip, false);
 }
 
 // 檢查勇者是否全程未穿戴任何文字裝備（完全徒手／初始狀態）
@@ -256,6 +276,86 @@ if ($historyModal) {
   });
 }
 
+/* ===== 第七版新增：左上角「測試者」按鈕（一鍵獲得 999 無敵套裝 ＋ 自由選擇前往樓層） ===== */
+function equipTesterSuit() {
+  if (!hero) return;
+  hero.equip.physWeapon = { ...TESTER_EQUIP_SET.physWeapon };
+  hero.equip.magWeapon = { ...TESTER_EQUIP_SET.magWeapon };
+  hero.equip.armor = { ...TESTER_EQUIP_SET.armor };
+  hero.hp = hero.maxHp;
+}
+
+function jumpToTesterFloor(targetFloor, targetRound = 1) {
+  closeTesterModal();
+  isBattleDrawerActive = false;
+  if ($battleDrawer) $battleDrawer.classList.remove("open");
+  if ($battleLog) $battleLog.innerHTML = "";
+  enemy = null;
+  gameOver = false;
+
+  floor = targetFloor;
+  round = targetRound;
+  floorDeck = buildFloorDeck(floor);
+  hero.maxHp = HERO_BASE.hp + (floor - 1) * FLOOR_HP_BONUS;
+  hero.hp = hero.maxHp;
+  equipTesterSuit();
+
+  const fInfo = getFloorInfo(floor);
+  $log.innerHTML = "";
+  log(`【測試者模式】已裝備無敵套裝（物理武器 999、魔法武器 999、物理防禦 999、魔法防禦 999），並傳送至第 ${floor} 層【${fInfo.name}】（第 ${round} 回合）！`, "big");
+  presentRound();
+}
+
+function openTesterModal() {
+  if (!hero) return;
+  equipTesterSuit();
+  renderStatus();
+
+  if (!$testerModal || !$testerFloorList) return;
+  $testerFloorList.innerHTML = "";
+
+  FLOORS.forEach(f => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = `前往第 ${f.floor} 層【${f.name}】（第 1 回合）`;
+    btn.onclick = () => jumpToTesterFloor(f.floor, 1);
+    $testerFloorList.appendChild(btn);
+  });
+
+  const btnBoss = document.createElement("button");
+  btnBoss.type = "button";
+  btnBoss.textContent = "直達第 5 層【文字魔王戰】（第 6 回合）";
+  btnBoss.onclick = () => jumpToTesterFloor(5, ROUNDS_PER_FLOOR);
+  $testerFloorList.appendChild(btnBoss);
+
+  const btnStay = document.createElement("button");
+  btnStay.type = "button";
+  btnStay.textContent = "留在當前位置繼續（僅穿戴 999 無敵套裝）";
+  btnStay.onclick = () => {
+    closeTesterModal();
+    log("【測試者模式】已穿戴 999 無敵套裝（物理武器 999、魔法武器 999、物理防禦 999、魔法防禦 999）！", "hit");
+    renderStatus();
+    if (enemy) showCombatButtons();
+  };
+  $testerFloorList.appendChild(btnStay);
+
+  $testerModal.classList.remove("hidden");
+}
+
+function closeTesterModal() {
+  if ($testerModal) $testerModal.classList.add("hidden");
+}
+
+const $btnCloseTester = document.getElementById("btn-close-tester");
+if ($btnCloseTester) {
+  $btnCloseTester.onclick = closeTesterModal;
+}
+if ($testerModal) {
+  $testerModal.addEventListener("click", e => {
+    if (e.target === $testerModal) closeTesterModal();
+  });
+}
+
 function setChoices(list) {
   if (document.activeElement && typeof document.activeElement.blur === "function") {
     document.activeElement.blur();
@@ -272,7 +372,7 @@ function setChoices(list) {
   });
 }
 
-// 渲染第 1 部分（頂部勇者資訊欄）與第 2 部分（獨立 3 行敵人對戰卡）
+// 渲染第 1 部分（頂部勇者資訊欄：左上角附「測試者」按鈕；第 3 行順序改為「物攻｜物防｜魔攻｜魔防」）與第 2 部分（敵人對戰卡）
 function renderStatus() {
   const s = calcStats(HERO_BASE, hero.equip, true);
   const curShield = enemy ? hero.shield : s.shield;
@@ -293,7 +393,10 @@ function renderStatus() {
 
   const statusHtml = `
     <div class="panel-row-top">
-      <div class="panel-title">${colorize(escapeHtml(stageTitle))}</div>
+      <div class="panel-title-group">
+        <button type="button" class="tester-btn" id="btn-tester">測試者</button>
+        <div class="panel-title">${colorize(escapeHtml(stageTitle))}</div>
+      </div>
       <div class="header-actions">
         <button type="button" class="mini-btn${equipBtnActive}" id="btn-toggle-equip">${equipBtnLabel}</button>
         <button type="button" class="mini-btn" id="btn-open-history">歷史對話</button>
@@ -313,8 +416,8 @@ function renderStatus() {
     </div>
     <div class="stats-quad-row">
       <div class="stat-cell">物攻 <span class="val">${s.physAtk}</span></div>
-      <div class="stat-cell">魔攻 <span class="val">${s.magAtk}</span></div>
       <div class="stat-cell">物防 <span class="val">${s.physDef}</span></div>
+      <div class="stat-cell">魔攻 <span class="val">${s.magAtk}</span></div>
       <div class="stat-cell">魔防 <span class="val">${s.magDef}</span></div>
     </div>
     <div id="equip-drawer" class="${drawerHidden.trim()}">
@@ -327,6 +430,10 @@ function renderStatus() {
 
   $status.innerHTML = statusHtml;
 
+  const $btnTester = document.getElementById("btn-tester");
+  if ($btnTester) {
+    $btnTester.onclick = openTesterModal;
+  }
   const $btnEquip = document.getElementById("btn-toggle-equip");
   if ($btnEquip) {
     $btnEquip.onclick = () => {
@@ -339,7 +446,7 @@ function renderStatus() {
     $btnHist.onclick = openHistoryModal;
   }
 
-  // 第 2 部分：獨立 3 行「敵人對戰卡」（依敵人名字顏色變換外框微光）
+  // 第 2 部分：獨立 3 行「敵人對戰卡」（第 3 行同樣對齊為「物攻｜物防｜魔攻｜魔防」）
   if (enemy && $enemyPanel) {
     const eColor = ENEMY_COLORS[enemy.name] || "#ff5c5c";
     $enemyPanel.style.setProperty("--enemy-glow", eColor);
@@ -389,8 +496,8 @@ function renderStatus() {
       </div>
       <div class="stats-quad-row">
         <div class="stat-cell">物攻 <span class="val">${enemy.physAtk}</span></div>
-        <div class="stat-cell">魔攻 <span class="val">${enemy.magAtk}</span></div>
         <div class="stat-cell">物防 ${pDefHtml}</div>
+        <div class="stat-cell">魔攻 <span class="val">${enemy.magAtk}</span></div>
         <div class="stat-cell">魔防 ${mDefHtml}</div>
       </div>`;
     $enemyPanel.classList.remove("hidden");
@@ -620,10 +727,9 @@ async function heroHitAnim(lostHp) {
 }
 
 /* =========================================================
-   1–5 層幕後事件池與爬塔流程（已全面隱藏牌庫顯示與相關對白）
+   1–5 層幕後事件池與爬塔流程（方案 B：營地回 60% 最大生命，殘頁篝火回 45% 最大生命）
    ========================================================= */
 
-// 建立單層的 5 個幕後遭遇事件（營地回復 50% 最大生命，殘頁篝火回復 35% 最大生命）
 function buildFloorDeck(fl) {
   const rawTypes = [...FIXED_FLOOR_CARDS, randomPick(RANDOM_FIFTH_POOL)];
   const monsters = FLOOR_MONSTERS[fl] || FLOOR_MONSTERS[1];
@@ -640,13 +746,13 @@ function buildFloorDeck(fl) {
       return {
         id: `fl${fl}_card${idx}_${Math.random()}`,
         type: "camp",
-        label: "在營地生火休息，回復 50% 最大生命",
+        label: "在營地生火休息，回復 60% 最大生命",
       };
     } else {
       return {
         id: `fl${fl}_card${idx}_${Math.random()}`,
         type: "skill_camp",
-        label: "在殘頁篝火旁調息，回復 35% 最大生命（暫代技能）",
+        label: "在殘頁篝火旁調息，回復 45% 最大生命（暫代技能）",
       };
     }
   });
@@ -673,6 +779,7 @@ function newGame(selectedMode) {
   if ($battleDrawer) $battleDrawer.classList.remove("open");
   if ($battleLog) $battleLog.innerHTML = "";
   closeHistoryModal();
+  closeTesterModal();
 
   hero = {
     hp: HERO_BASE.hp,
@@ -774,7 +881,7 @@ function advanceAfterEvent() {
   presentRound();
 }
 
-/* ===== 營地回復（選項 3A：營地回復 50% 最大生命，殘頁篝火回復 35% 最大生命） ===== */
+/* ===== 營地回復（方案 B：營地回復 60% 最大生命，殘頁篝火回復 45% 最大生命） ===== */
 function camp(isSkillPlaceholder) {
   const ratio = isSkillPlaceholder ? SKILL_CAMP_HEAL_RATIO : CAMP_HEAL_RATIO;
   const healTarget = Math.max(1, Math.floor(hero.maxHp * ratio));
@@ -782,9 +889,9 @@ function camp(isSkillPlaceholder) {
   hero.hp = Math.min(hero.maxHp, hero.hp + healTarget);
   const healed = hero.hp - beforeHp;
   if (isSkillPlaceholder) {
-    log(`你在殘頁篝火旁靜心調息（暫代技能，回復 35% 最大生命）。生命回復 ${healed} 點，現在是 ${hero.hp} / ${hero.maxHp}。`);
+    log(`你在殘頁篝火旁靜心調息（暫代技能，回復 45% 最大生命）。生命回復 ${healed} 點，現在是 ${hero.hp} / ${hero.maxHp}。`);
   } else {
-    log(`你在營地生火休息（回復 50% 最大生命）。生命回復 ${healed} 點，現在是 ${hero.hp} / ${hero.maxHp}。`);
+    log(`你在營地生火休息（回復 60% 最大生命）。生命回復 ${healed} 點，現在是 ${hero.hp} / ${hero.maxHp}。`);
   }
   renderStatus();
   setChoices([{ label: "繼續前進", action: advanceAfterEvent }]);
@@ -890,8 +997,8 @@ function showCombatButtons() {
 
 async function startBattle(template) {
   if (template.isPhase2Boss) {
-    // 二階段（選項 3A）：除生命（160）與飾品（勇者之劍）外，1:1 鏡像複製勇者並加上本源加成（雙攻+4、雙防+2），前半血處於【亂碼侵蝕】（攻擊×1.15／吸血+3）
-    const mirror = calcStats(HERO_BASE, hero.equip, false);
+    // 二階段（方案 B）：HP 135，1:1 鏡像複製勇者（排除勇者之劍與測試者 999 裝備），前半血處於【亂碼侵蝕】（攻擊×1.05／吸血+2）
+    const mirror = calcMirrorStatsForPhase2(HERO_BASE, hero.equip);
     const baseMirrorPhysAtk = mirror.physAtk + PHASE2_BOSS_BONUS_ATK;
     const baseMirrorMagAtk = mirror.magAtk + PHASE2_BOSS_BONUS_ATK;
     const baseMirrorPhysDef = mirror.physDef + PHASE2_BOSS_BONUS_DEF;
@@ -1005,7 +1112,7 @@ async function startBattle(template) {
   showCombatButtons();
 }
 
-// 計算並套用傷害：支援【骰子模式】（0失手、18-20無視護盾、20無視50%防禦）與【撲克模式】（黑紅花色臨時+3、J/Q/K無視護盾、A無視50%防禦與護盾）
+// 計算並套用傷害（方案 B：骰子 0 失手、20 無視 50% 防禦＋無視護盾；撲克黑紅花色臨時+3、K 無視護盾、A 無視 50% 防禦＋無視護盾）
 function dealDamage(attackerName, atkType, atk, def, target, dice, cardInfo) {
   const atkLabel = atkType === "mag" ? "魔法攻擊" : "物理攻擊";
   const defLabel = atkType === "mag" ? "魔防" : "物防";
@@ -1046,15 +1153,15 @@ function dealDamage(attackerName, atkType, atk, def, target, dice, cardInfo) {
     return { mainLine, formulaLine, dmg, toShield, toHp };
   }
 
-  // 2. 撲克模式（cardInfo 存在：無失手；黑色花色物攻臨時+3、紅色花色魔攻臨時+3；J/Q/K 無視護盾；A 無視50%防禦＋無視護盾）
+  // 2. 撲克模式（方案 B：無失手；黑色花色物攻臨時+3、紅色花色魔攻臨時+3；K 無視護盾；A 無視50%防禦＋無視護盾）
   const isBlackSuit = (cardInfo.suit.key === "S" || cardInfo.suit.key === "C");
   const suitMatched = (atkType === "phys" && isBlackSuit) || (atkType === "mag" && !isBlackSuit);
   const suitBonus = suitMatched ? POKER_SUIT_ATK_BONUS : 0;
   const effAtk = atk + suitBonus;
 
   const isAce = (cardInfo.rank === "A");
-  const isFace = (dice >= POKER_FACE_PIERCE_MIN);
-  const ignoreShield = (isAce || isFace);
+  const isKing = (dice === POKER_KING_PIERCE_VAL);
+  const ignoreShield = (isAce || isKing);
   const effDef = isAce ? Math.floor(def * POKER_ACE_DEF_MULT) : def;
 
   const dmg = Math.max(0, effAtk + dice - effDef);
@@ -1065,12 +1172,12 @@ function dealDamage(attackerName, atkType, atk, def, target, dice, cardInfo) {
 
   const tags = [];
   if (suitBonus > 0) {
-    tags.push(`${ isBlackSuit ? "黑花色物攻" : "紅花色魔攻" }+${suitBonus}`);
+    tags.push(`${isBlackSuit ? "黑花色物攻" : "紅花色魔攻"}+${suitBonus}`);
   }
   if (isAce) {
     tags.push("王牌A：無視50%防禦＋無視護盾");
-  } else if (isFace) {
-    tags.push(`人頭牌${cardInfo.rank}：無視護盾`);
+  } else if (isKing) {
+    tags.push("老K：無視護盾");
   }
   const tagStr = tags.length > 0 ? `［${tags.join("｜")}］` : "";
 
@@ -1135,7 +1242,7 @@ async function heroAttack(atkType) {
     log(BOSS_STRUGGLE_TEXT, "text-curse");
   }
 
-  // 二階段半血（HP <= 80）顯露真名「文字.沙坦」並進入狂暴狀態（雙攻提升為 ×1.45 ＋ 立即重鑄 15 點原典黑盾）
+  // 二階段半血（HP <= 67）顯露真名「文字.沙坦」並進入狂暴狀態（雙攻提升為 ×1.35 ＋ 立即重鑄 10 點原典黑盾）
   if (enemy.isPhase2Boss && !enemy.halfHpTriggered && enemy.hp <= enemy.maxHp * PHASE2_BOSS_RAGE_HP_RATIO) {
     enemy.halfHpTriggered = true;
     const oldHiddenName = enemy.name;
@@ -1222,13 +1329,13 @@ async function enemyAttack() {
   const hpBefore = hero.hp;
   const report = dealDamage(enemy.name, atkType, atkVal, defVal, target, dice, drawnCard);
 
-  // 檢查是否觸發飾品【勇者之劍】殘魂免疫致命傷（選項 2A：最多 2 次，鎖 1 血，且每觸發 1 次攻擊倍率下降 0.15）
+  // 檢查是否觸發飾品【勇者之劍】殘魂免疫致命傷（方案 B：最多 2 次，鎖 1 血並重鑄滿額護盾，每次倍率下降 0.15）
   const acc = hero.equip.accessory;
   if (target.hp <= 0 && acc && acc.isHeroSword && acc.blocksLeft > 0) {
     acc.blocksLeft--;
     acc.atkMult = Math.max(1.0, Math.round((acc.atkMult - HERO_SWORD_BLOCK_DECAY) * 100) / 100);
-    hero.shield = 0;
-    hero.hp = 1; // 保留 1 點生命（鎖 1 血）
+    hero.shield = calcStats(HERO_BASE, hero.equip, true).shield;
+    hero.hp = 1; // 保留 1 點生命（鎖 1 血並重鑄護盾）
     logCombatReport(false, report.mainLine, report.formulaLine);
     renderStatus();
 
@@ -1237,11 +1344,11 @@ async function enemyAttack() {
 
     // 畫面變暗並在中心顯示文字消失效果
     if (acc.blocksLeft > 0) {
-      log(`勇者之劍裏的殘魂突然出現，爲勇者擋下了致命一擊。勇者的殘魂變弱了一分（攻擊倍率降至 ×${acc.atkMult}，勇者保留 1 點生命）。`, "hit");
+      log(`勇者之劍裏的殘魂突然出現，爲勇者擋下了致命一擊並重鑄護盾！勇者的殘魂變弱了一分（攻擊倍率降至 ×${acc.atkMult}，勇者保留 1 點生命）。`, "hit");
       renderStatus();
       await playStorySequence([HERO_SWORD_BLOCK_TEXT]);
     } else {
-      log("勇者之劍裏的殘魂拼盡最後一份力爲勇者擋下致命一擊。勇者的殘魂消失了...（攻擊加成消逝，勇者保留 1 點生命）", "hit");
+      log(`勇者之劍裏的殘魂拼盡最後一份力爲勇者擋下致命一擊並重鑄護盾！勇者的殘魂消失了...（攻擊倍率降至 ×${acc.atkMult}，勇者保留 1 點生命）`, "hit");
       log(`${enemy.name}：「（邪笑）看你還有甚麼手段抵擋我」`, "text-curse");
       renderStatus();
       await playStorySequence([HERO_SWORD_BLOCK_TEXT, HERO_SWORD_VANISH_TEXT]);
@@ -1253,7 +1360,7 @@ async function enemyAttack() {
   hero.shield = target.shield;
   hero.hp = target.hp;
 
-  // 二階段前半血【亂碼侵蝕】吸血機制：若本次攻擊對勇者造成實際生命傷害且勇者尚未倒下，吸取 3 點生命
+  // 二階段前半血【亂碼侵蝕】吸血機制：若本次攻擊對勇者造成實際生命傷害且勇者尚未倒下，吸取 2 點生命
   if (enemy && enemy.isPhase2Boss && !enemy.inRage && report.toHp > 0 && hero.hp > 0) {
     const beforeEnemyHp = enemy.hp;
     enemy.hp = Math.min(enemy.maxHp, enemy.hp + PHASE2_BOSS_LIFESTEAL);
@@ -1294,7 +1401,7 @@ async function winBattle() {
       return;
     }
 
-    // 正常路線：文字魔王倒下後，勇者發現其身分為「前勇者」，獲得【勇者之劍】（回復 50% 最大生命、初始 ×1.3 攻擊、2 次殘魂擋死）
+    // 正常路線：文字魔王倒下後，勇者發現其身分為「前勇者」，獲得【勇者之劍】（方案 B：回復 80% 最大生命、初始 ×1.45 攻擊、2 次殘魂擋死）
     const swordItem = { ...HERO_SWORD_ITEM };
     hero.equip.accessory = swordItem;
     const healGain = Math.max(1, Math.floor(hero.maxHp * HERO_SWORD_HEAL_RATIO));

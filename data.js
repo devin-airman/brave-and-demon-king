@@ -1,6 +1,6 @@
 /* =========================================================
-   樓層、三系怪物、裝備與跨層寶箱資料庫 (data.js)
-   資料來源：《勇者與魔王_全樓層怪物與裝備數值表.xlsx》與定案規格
+   樓層、三系怪物、裝備、跨層寶箱與測試者無敵套裝資料庫 (data.js — 第七版 v7)
+   資料來源：《勇者與魔王_全樓層怪物與裝備數值表.xlsx》與第七版方案 B 定案規格
    註：怪物強化的攻防直接加於怪物自身的 baseStats 上，不改動掉落裝備數值
    ========================================================= */
 
@@ -13,22 +13,46 @@ const FLOORS = [
   { floor: 5, name: "原典王座", desc: "萬物文字化的源頭，純白與漆黑的原典文字拱衛著最深處的王座。" },
 ];
 
-// 1–5 層怪物與攜帶裝備設定表
-// 怪物總戰力 = 怪物自身基礎屬性 (baseStats) + 攜帶裝備 (items)；打倒怪物掉落的 items 維持原始數值不膨脹
-// 選項 2B：1–5 層小怪生命值 +20%，並透過 baseStats 將弱點防禦提升至 3~4 / 6 / 10 / 14 / 19、主攻提升至 5~7 / 9~11 / 14~17 / 20~23 / 26~30
+// 測試者專屬無敵套裝（點擊左上角「測試者」按鈕一鍵獲得：物理武器、魔法武器、物防、魔防全部 999）
+const TESTER_EQUIP_SET = {
+  physWeapon: {
+    slot: "physWeapon",
+    name: "測試者無敵聖劍",
+    physAtk: TESTER_STAT_VAL,
+    isTesterItem: true,
+    textDesc: "【測試者模式】已裝備無敵物理武器（物攻 999）。",
+  },
+  magWeapon: {
+    slot: "magWeapon",
+    name: "測試者無敵魔典",
+    magAtk: TESTER_STAT_VAL,
+    isTesterItem: true,
+    textDesc: "【測試者模式】已裝備無敵魔法武器（魔攻 999）。",
+  },
+  armor: {
+    slot: "armor",
+    name: "測試者無敵神甲",
+    physDef: TESTER_STAT_VAL,
+    magDef: TESTER_STAT_VAL,
+    isTesterItem: true,
+    textDesc: "【測試者模式】已裝備無敵裝甲（物防 999／魔防 999）。",
+  },
+};
+
+// 1–5 層怪物與攜帶裝備設定表（方案 B：小怪 HP +10%，baseStats 輕量加成攻擊 +1~+2、弱點防禦 +1~+3，掉落 items 維持原始數值）
 const FLOOR_MONSTERS = {
   1: [
     {
-      name: "墨染史萊姆", type: "phys", typeLabel: "物理怪", hp: 22, weight: 40,
-      baseStats: { physAtk: 2, magAtk: 0, physDef: 0, magDef: 2 },
+      name: "墨染史萊姆", type: "phys", typeLabel: "物理怪", hp: 20, weight: 40,
+      baseStats: { physAtk: 0, magAtk: 0, physDef: 0, magDef: 1 },
       items: [
         { slot: "physWeapon", name: "墨痕鈍刺", physAtk: 3, textDesc: "右手掌被黏稠的黑墨浸染，化作了「刺」字...力量湧現。" },
         { slot: "armor", name: "凝墨外皮", physDef: 6, magDef: 1, textDesc: "胸口肌膚浮現墨色硬甲，化為「革」字...防護提升。" },
       ],
     },
     {
-      name: "漂浮符文妖", type: "mag", typeLabel: "魔法怪", hp: 17, weight: 40,
-      baseStats: { physAtk: 0, magAtk: 2, physDef: 3, magDef: 0 },
+      name: "漂浮符文妖", type: "mag", typeLabel: "魔法怪", hp: 15, weight: 40,
+      baseStats: { physAtk: 0, magAtk: 0, physDef: 1, magDef: 0 },
       items: [
         { slot: "magWeapon", name: "散佚字元杖", magAtk: 4, textDesc: "右臂蔓延出幽藍的筆畫，握柄處凝成了「杖」字...魔力湧動。" },
         { slot: "armor", name: "虛質殘頁", physDef: 0, magDef: 7, textDesc: "肩頭飄落半透明書頁，皮膚化作了「紋」字...魔抗增強。" },
@@ -36,8 +60,8 @@ const FLOOR_MONSTERS = {
       ],
     },
     {
-      name: "墨痕聚合體", type: "chaos", typeLabel: "渾沌怪", hp: 29, weight: 20,
-      baseStats: { physAtk: 2, magAtk: 2, physDef: 2, magDef: 2 },
+      name: "墨痕聚合體", type: "chaos", typeLabel: "渾沌怪", hp: 26, weight: 20,
+      baseStats: { physAtk: 0, magAtk: 0, physDef: 1, magDef: 1 },
       items: [
         { slot: "physWeapon", name: "錯亂墨骨刃", physAtk: 5, textDesc: "右手骨骼劇痛並扭曲，凝結成一把墨色「刃」字骨刃。" },
         { slot: "magWeapon", name: "錯亂符文刃", magAtk: 5, textDesc: "左臂被流動的藍光符碼覆蓋，化作散發微光的「咒」字短刃。" },
@@ -48,8 +72,8 @@ const FLOOR_MONSTERS = {
   ],
   2: [
     {
-      name: "蝕刻穴居人", type: "phys", typeLabel: "物理怪", hp: 31, weight: 40,
-      baseStats: { physAtk: 3, magAtk: 0, physDef: 0, magDef: 4 },
+      name: "蝕刻穴居人", type: "phys", typeLabel: "物理怪", hp: 29, weight: 40,
+      baseStats: { physAtk: 1, magAtk: 0, physDef: 0, magDef: 1 },
       items: [
         { slot: "physWeapon", name: "粗糙岩鑿斧", physAtk: 6, textDesc: "小臂肌肉骨化為粗獷的「斧」字...揮擊沉重有力。" },
         { slot: "armor", name: "石刻重甲", physDef: 10, magDef: 2, textDesc: "軀幹石化剝落，背後烙印著厚重的「磐」字...物防大增。" },
@@ -57,8 +81,8 @@ const FLOOR_MONSTERS = {
       ],
     },
     {
-      name: "洞窟秘術咒靈", type: "mag", typeLabel: "魔法怪", hp: 26, weight: 40,
-      baseStats: { physAtk: 0, magAtk: 2, physDef: 4, magDef: 0 },
+      name: "洞窟秘術咒靈", type: "mag", typeLabel: "魔法怪", hp: 24, weight: 40,
+      baseStats: { physAtk: 0, magAtk: 1, physDef: 1, magDef: 0 },
       items: [
         { slot: "magWeapon", name: "石窟咒印杖", magAtk: 8, textDesc: "指尖流瀉暗色咒文，化作閃耀的「術」字...魔能澎湃。" },
         { slot: "armor", name: "低語法袍", physDef: 2, magDef: 11, textDesc: "輕柔的絮語纏繞胸膛，皮膚化為幽暗的「霧」字抵禦法術。" },
@@ -66,8 +90,8 @@ const FLOOR_MONSTERS = {
       ],
     },
     {
-      name: "裂隙蝕骨獸", type: "chaos", typeLabel: "渾沌怪", hp: 41, weight: 20,
-      baseStats: { physAtk: 3, magAtk: 3, physDef: 3, magDef: 3 },
+      name: "裂隙蝕骨獸", type: "chaos", typeLabel: "渾沌怪", hp: 37, weight: 20,
+      baseStats: { physAtk: 1, magAtk: 1, physDef: 1, magDef: 1 },
       items: [
         { slot: "physWeapon", name: "裂隙碎骨爪", physAtk: 8, textDesc: "右手五指化作泛著骨白的「爪」字...撕裂皮肉。" },
         { slot: "magWeapon", name: "蝕隙咒魂爪", magAtk: 8, textDesc: "左手纏繞著幽紫色的文字「痕」...魔力破壞力劇增。" },
@@ -78,8 +102,8 @@ const FLOOR_MONSTERS = {
   ],
   3: [
     {
-      name: "亂碼骸骨死士", type: "phys", typeLabel: "物理怪", hp: 43, weight: 40,
-      baseStats: { physAtk: 4, magAtk: 0, physDef: 0, magDef: 6 },
+      name: "亂碼骸骨死士", type: "phys", typeLabel: "物理怪", hp: 40, weight: 40,
+      baseStats: { physAtk: 1, magAtk: 0, physDef: 0, magDef: 2 },
       items: [
         { slot: "physWeapon", name: "鏽蝕斷碼劍", physAtk: 10, textDesc: "手骨徹底金屬文字化，凝結出殘破的「劍」字鋒刃。" },
         { slot: "armor", name: "骨片鏈甲", physDef: 15, magDef: 4, textDesc: "鏈條與骨片穿透皮肉，在胸腹拼湊出冰冷的「鐵」字。" },
@@ -87,8 +111,8 @@ const FLOOR_MONSTERS = {
       ],
     },
     {
-      name: "哀號字節幽魂", type: "mag", typeLabel: "魔法怪", hp: 36, weight: 40,
-      baseStats: { physAtk: 0, magAtk: 3, physDef: 6, magDef: 0 },
+      name: "哀號字節幽魂", type: "mag", typeLabel: "魔法怪", hp: 33, weight: 40,
+      baseStats: { physAtk: 0, magAtk: 1, physDef: 2, magDef: 0 },
       items: [
         { slot: "magWeapon", name: "噪點引魂幡", magAtk: 13, textDesc: "耳旁響起淒厲噪音，掌心文字炸裂為「魄」字魔引。" },
         { slot: "armor", name: "虛無靈衣", physDef: 4, magDef: 16, textDesc: "身體漸趨透明虛化，軀幹化為空洞的「虛」字避開魔法。" },
@@ -96,8 +120,8 @@ const FLOOR_MONSTERS = {
       ],
     },
     {
-      name: "亂碼編譯魔像", type: "chaos", typeLabel: "渾沌怪", hp: 58, weight: 20,
-      baseStats: { physAtk: 5, magAtk: 5, physDef: 5, magDef: 5 },
+      name: "亂碼編譯魔像", type: "chaos", typeLabel: "渾沌怪", hp: 53, weight: 20,
+      baseStats: { physAtk: 1, magAtk: 1, physDef: 2, magDef: 2 },
       items: [
         { slot: "physWeapon", name: "編譯破壞槌", physAtk: 12, textDesc: "右臂化作沉重的符碼巨槌，砸下時顯現「碎」字威力。" },
         { slot: "magWeapon", name: "重構解碼杖", magAtk: 12, textDesc: "左腕重組為閃爍錯誤代碼的法杖，激盪「析」字魔力。" },
@@ -108,8 +132,8 @@ const FLOOR_MONSTERS = {
   ],
   4: [
     {
-      name: "淵面行刑者", type: "phys", typeLabel: "物理怪", hp: 58, weight: 40,
-      baseStats: { physAtk: 5, magAtk: 0, physDef: 0, magDef: 8 },
+      name: "淵面行刑者", type: "phys", typeLabel: "物理怪", hp: 53, weight: 40,
+      baseStats: { physAtk: 2, magAtk: 0, physDef: 0, magDef: 2 },
       items: [
         { slot: "physWeapon", name: "斷頭重鋼斧", physAtk: 15, textDesc: "肌肉撕裂並重組，化為充斥殺戮血光的「斬」字巨刃。" },
         { slot: "armor", name: "淵黑重鎧", physDef: 22, magDef: 6, textDesc: "深淵重鐵吸附於骨骼，化作沉重而不可撼動的「固」字。" },
@@ -117,8 +141,8 @@ const FLOOR_MONSTERS = {
       ],
     },
     {
-      name: "斷章星象術士", type: "mag", typeLabel: "魔法怪", hp: 48, weight: 40,
-      baseStats: { physAtk: 0, magAtk: 4, physDef: 8, magDef: 0 },
+      name: "斷章星象術士", type: "mag", typeLabel: "魔法怪", hp: 44, weight: 40,
+      baseStats: { physAtk: 0, magAtk: 2, physDef: 2, magDef: 0 },
       items: [
         { slot: "magWeapon", name: "虛空星象儀", magAtk: 18, textDesc: "星辰軌跡在眼中轉動，指引出無窮星輝的「星」字法器。" },
         { slot: "armor", name: "星痕深淵袍", physDef: 6, magDef: 23, textDesc: "法袍如同深空夜幕披身，體內鐫刻「曜」字吞噬法能。" },
@@ -126,8 +150,8 @@ const FLOOR_MONSTERS = {
       ],
     },
     {
-      name: "虛空斷章巨靈", type: "chaos", typeLabel: "渾沌怪", hp: 78, weight: 20,
-      baseStats: { physAtk: 6, magAtk: 6, physDef: 6, magDef: 6 },
+      name: "虛空斷章巨靈", type: "chaos", typeLabel: "渾沌怪", hp: 72, weight: 20,
+      baseStats: { physAtk: 2, magAtk: 2, physDef: 2, magDef: 2 },
       items: [
         { slot: "physWeapon", name: "湮滅碎裂核", physAtk: 17, textDesc: "右掌中文字崩塌為引力核心，爆發「坍」字物理重擊。" },
         { slot: "magWeapon", name: "虛無噬靈核", magAtk: 17, textDesc: "左手浮現深空文字漩渦，釋放撕裂維度的「噬」字魔能。" },
@@ -138,8 +162,8 @@ const FLOOR_MONSTERS = {
   ],
   5: [
     {
-      name: "原典禁衛巨兵", type: "phys", typeLabel: "物理怪", hp: 74, weight: 40,
-      baseStats: { physAtk: 5, magAtk: 0, physDef: 0, magDef: 11 },
+      name: "原典禁衛巨兵", type: "phys", typeLabel: "物理怪", hp: 68, weight: 40,
+      baseStats: { physAtk: 2, magAtk: 0, physDef: 0, magDef: 3 },
       items: [
         { slot: "physWeapon", name: "王座金敕戟", physAtk: 21, textDesc: "神聖金光貫通右臂，血肉完形為神聖威嚴的「敕」字金戟。" },
         { slot: "armor", name: "原典神聖板甲", physDef: 30, magDef: 8, textDesc: "宛如聖殿梁柱般的純白文字化作胸甲，「城」字固若金湯。" },
@@ -147,8 +171,8 @@ const FLOOR_MONSTERS = {
       ],
     },
     {
-      name: "王座吟唱主教", type: "mag", typeLabel: "魔法怪", hp: 62, weight: 40,
-      baseStats: { physAtk: 0, magAtk: 4, physDef: 11, magDef: 0 },
+      name: "王座吟唱主教", type: "mag", typeLabel: "魔法怪", hp: 57, weight: 40,
+      baseStats: { physAtk: 0, magAtk: 2, physDef: 3, magDef: 0 },
       items: [
         { slot: "magWeapon", name: "終焉聖典", magAtk: 25, textDesc: "原典之言在心頭響起，右手捧起散發耀眼光芒的「典」字之書。" },
         { slot: "armor", name: "審判聖輝袍", physDef: 8, magDef: 31, textDesc: "聖潔經文流淌周身，皮膚化作「聖」字，一切魔法皆化泡影。" },
@@ -156,8 +180,8 @@ const FLOOR_MONSTERS = {
       ],
     },
     {
-      name: "文字同化核心", type: "chaos", typeLabel: "渾沌怪", hp: 102, weight: 20,
-      baseStats: { physAtk: 7, magAtk: 7, physDef: 8, magDef: 8 },
+      name: "文字同化核心", type: "chaos", typeLabel: "渾沌怪", hp: 94, weight: 20,
+      baseStats: { physAtk: 2, magAtk: 2, physDef: 3, magDef: 3 },
       items: [
         { slot: "physWeapon", name: "原典創生之刃", physAtk: 23, textDesc: "右臂文字凝聚為萬物實體，化為裁斷因果的「創」字巨劍。" },
         { slot: "magWeapon", name: "原典終焉法杖", magAtk: 23, textDesc: "左手文字昇華為能量狂潮，點燃終結萬象的「滅」字法杖。" },
@@ -169,7 +193,6 @@ const FLOOR_MONSTERS = {
 };
 
 // 第 1–4 層跨層寶箱裝備池（每層 4 件：物理武器、魔法武器、裝甲、護盾各 1 件，開寶箱時隨機 4 抽 1）
-// 強度嚴格設定於「當前層 (N) 與下一層 (N+1)」之間
 const FLOOR_CHEST_ITEMS = {
   1: [
     { slot: "physWeapon", name: "篆刻黑鐵劍", physAtk: 6, textDesc: "右手掌浮現鋒利的黑鐵筆畫，化作「鋒」字...斬擊更為凌厲。" },
@@ -197,15 +220,15 @@ const FLOOR_CHEST_ITEMS = {
   ],
 };
 
-// 第 5 層一階段魔王設定（選項 1A：HP 135，加上 baseStats 後總雙攻 33、總雙防 30；擊敗前完全不顯示前勇者字眼）
+// 第 5 層一階段魔王設定（方案 B：HP 120，加上 baseStats +2/+2 後總雙攻 30、總雙防 28；擊敗前完全不顯示前勇者字眼）
 const BOSS = {
   name: "文字魔王",
   fullTitle: "文字魔王",
   type: "chaos",
   typeLabel: "魔王",
-  hp: 135,
+  hp: 120,
   isBoss: true,
-  baseStats: { physAtk: 5, magAtk: 5, physDef: 4, magDef: 4 },
+  baseStats: { physAtk: 2, magAtk: 2, physDef: 2, magDef: 2 },
   items: [
     { slot: "physWeapon", name: "褪色誓約聖劍·破甲", physAtk: 28, textDesc: "昔日聖劍的物理鋒芒，鏽跡斑斑卻飽含殺意。" },
     { slot: "magWeapon", name: "褪色誓約聖劍·魔湧", magAtk: 28, textDesc: "昔日聖劍的殘留光輝，如今轉化為文字詛咒魔潮。" },
@@ -214,17 +237,17 @@ const BOSS = {
   ],
 };
 
-// 擊敗一階段魔王後獲得之特殊遺物飾品【勇者之劍】（選項 2A：回復 50% 最大生命、初始攻擊 ×1.3、擋死 2 次且每次衰減 0.15）
+// 擊敗一階段魔王後獲得之特殊遺物飾品【勇者之劍】（方案 B：回復 80% 最大生命、初始攻擊 ×1.45、擋死 2 次且每次衰減 0.15 並重鑄滿額護盾）
 const HERO_SWORD_ITEM = {
   slot: "accessory",
   name: "勇者之劍",
   isHeroSword: true,
   atkMult: HERO_SWORD_ATK_MULT,
   blocksLeft: HERO_SWORD_MAX_BLOCKS,
-  desc: "前代勇者託付的非文字遺物。初始攻擊力 ×1.3，首次取得回復 50% 最大生命，並由劍中殘魂替勇者擋下最多 2 次致命傷（鎖 1 血，每擋死 1 次攻擊倍率下降 0.15）。",
+  desc: "前代勇者託付的非文字遺物。初始攻擊力 ×1.45，首次取得回復 80% 最大生命，並由劍中殘魂替勇者擋下最多 2 次致命傷（鎖 1 血並重鑄護盾，每擋死 1 次攻擊倍率下降 0.15）。",
 };
 
-// 第 5 層二階段心魔設定（選項 3A：HP 160，半血前只顯示 @$+%^&¥，不寫真魔王或沙坦）
+// 第 5 層二階段心魔設定（方案 B：HP 135，半血前只顯示 @$+%^&¥，不寫真魔王或沙坦）
 const PHASE2_BOSS = {
   name: PHASE2_BOSS_HIDDEN_NAME,
   trueName: PHASE2_BOSS_TRUE_NAME,
@@ -235,8 +258,7 @@ const PHASE2_BOSS = {
 };
 
 
-// 第五版新增：52 張標準撲克牌設定（不含鬼牌，A=1, 2–10, J=11, Q=12, K=13）
-// 供「撲克模式」洗牌抽牌動畫與紅黑花色／特殊牌面效果使用
+// 52 張標準撲克牌設定（不含鬼牌，A=1, 2–10, J=11, Q=12, K=13）
 const POKER_SUITS = [
   { key: "S", symbol: "♠", name: "黑桃", colorClass: "is-black" },
   { key: "H", symbol: "♥", name: "紅心", colorClass: "is-red" },
