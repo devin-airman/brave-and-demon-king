@@ -17,45 +17,327 @@ body {
   height: 100dvh;
   display: flex;
   flex-direction: column;
-  padding: 16px;
-  gap: 12px;
+  padding: 14px 16px;
+  gap: 10px;
 }
 
-/* ===== 狀態列 ===== */
+/* ===== 第 1 部分：頂部勇者資訊欄（微藍光外框 + 極簡 3 行 + 可展開裝備抽屜） ===== */
 #status {
-  border: 1px solid #e8e8e8;
-  padding: 10px 14px;
+  background: #03060c;
+  border: 1px solid #4da6ff;
+  box-shadow: 0 0 12px rgba(77, 166, 255, 0.35), inset 0 0 8px rgba(77, 166, 255, 0.12);
+  padding: 9px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-radius: 2px;
+}
+
+.panel-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.panel-title {
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+.header-actions {
+  display: flex;
+  gap: 6px;
+}
+.mini-btn {
+  background: #000;
+  color: #e8e8e8;
+  border: 1px solid #888;
+  font-family: inherit;
+  font-size: 12.5px;
+  padding: 2px 8px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .mini-btn:hover {
+    border-color: #fff;
+    background: #222;
+  }
+}
+.mini-btn:active {
+  background: #262626;
+}
+.mini-btn.active {
+  border-color: #4da6ff;
+  color: #4da6ff;
+}
+
+/* 生命與護盾雙動態條（勇者與敵人共用） */
+.bars-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 2px 20px;
+  gap: 14px;
+  align-items: center;
 }
-#status .title { grid-column: 1 / -1; font-weight: bold; letter-spacing: 2px; }
-#status .full { grid-column: 1 / -1; }
-#status .enemy-bar {
+.stat-bar-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.stat-label {
+  white-space: nowrap;
+  font-weight: bold;
+}
+.bar-track {
+  flex: 1;
+  height: 11px;
+  background: #1a1a1a;
+  border: 1px solid #555;
+  position: relative;
+  overflow: hidden;
+  min-width: 50px;
+}
+.bar-fill {
+  height: 100%;
+  transition: width 240ms ease-out;
+}
+.bar-fill.hp-hero { background: #38d399; }
+.bar-fill.hp-enemy { background: #ff5252; }
+.bar-fill.shield-fill { background: #5bc0be; }
+.stat-num {
+  white-space: nowrap;
+  font-size: 13px;
+  min-width: 50px;
+  text-align: right;
+}
+
+/* 第 3 行：上下對齊的雙攻雙防四格列 */
+.stats-quad-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  font-size: 14px;
+  padding-top: 2px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.stat-cell {
+  white-space: nowrap;
+}
+.stat-cell .val {
+  font-weight: bold;
+  color: #fff;
+}
+.stat-cell .debuff {
+  color: #ffd23f;
+  font-weight: bold;
+}
+
+/* 5 格常駐裝備摺疊抽屜 */
+#equip-drawer {
   margin-top: 4px;
-  padding-top: 4px;
-  border-top: 1px dashed #555;
-  color: #f0d0d0;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(77, 166, 255, 0.45);
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: #d0d8e8;
 }
+
+/* ===== 第 2 部分：獨立 3 行「敵人對戰卡」（依敵人名字顏色變換外框微光） ===== */
+#enemy-panel {
+  background: #090406;
+  border: 1px solid var(--enemy-glow, #ff5c5c);
+  box-shadow: 0 0 12px var(--enemy-glow-soft, rgba(255, 92, 92, 0.38)),
+              inset 0 0 8px var(--enemy-glow-inset, rgba(255, 92, 92, 0.14));
+  padding: 9px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-radius: 2px;
+  transition: border-color 280ms ease, box-shadow 280ms ease;
+}
+.enemy-tag {
+  font-size: 13.5px;
+  color: #ffd23f;
+  font-weight: bold;
+}
+
 .dim { color: #8a8a8a; }
 
-/* ===== 主文字顯示區 ===== */
+/* ===== 第 3 部分：中間對話區（一般對話框 + 開戰文字漸隱 + 頂部拉下／底部收回戰鬥對話框） ===== */
+#dialogue-stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  border: 1px solid #555;
+  background: #000;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
 #log {
   flex: 1;
-  border: 1px solid #555;
   padding: 12px 14px;
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-word;
 }
-#log p { margin-bottom: 4px; }
-#log .sep { color: #555; margin: 8px 0; }
-#log .hit { color: #fff; }
-#log .hurt { color: #bbb; }
-#log .big { font-weight: bold; color: #fff; }
-#log .text-curse { color: #c792ea; font-weight: bold; }
+#log p, #battle-log p { margin-bottom: 8px; }
+#log .sep, #battle-log .sep, #history-content .sep { color: #555; margin: 8px 0; }
+#log .hit, #battle-log .hit, #history-content .hit { color: #fff; }
+#log .hurt, #battle-log .hurt, #history-content .hurt { color: #bbb; }
+#log .big, #battle-log .big, #history-content .big { font-weight: bold; color: #fff; }
+#log .text-curse, #battle-log .text-curse, #history-content .text-curse { color: #c792ea; font-weight: bold; }
 
-/* ===== 按鈕選項區 ===== */
+/* 「戰鬥開始了！！！」文字出現並漸漸透明消失動畫層 */
+#battle-intro-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.84);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 12;
+  opacity: 0;
+  pointer-events: none;
+}
+#battle-intro-overlay.active {
+  pointer-events: all;
+  animation: battleIntroBg var(--battle-intro-ms, 1100ms) ease forwards;
+}
+#battle-intro-overlay .intro-text {
+  font-size: 26px;
+  font-weight: bold;
+  letter-spacing: 4px;
+  color: #fff;
+  text-shadow: 0 0 14px rgba(255, 255, 255, 0.55);
+  opacity: 0;
+}
+#battle-intro-overlay.active .intro-text {
+  animation: battleIntroText var(--battle-intro-ms, 1100ms) ease-in-out forwards;
+}
+@keyframes battleIntroBg {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes battleIntroText {
+  0% { opacity: 0; transform: scale(0.92); }
+  28% { opacity: 1; transform: scale(1.03); }
+  65% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.06); }
+}
+
+/* 從對話框頂部拉下、結束時從底部往上收回的專屬「戰鬥對話框」 */
+#battle-drawer {
+  position: absolute;
+  inset: 0;
+  background: #050508;
+  border-bottom: 2px solid #e8e8e8;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(-102%);
+  transition: transform var(--battle-drawer-ms, 400ms) cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.9);
+}
+#battle-drawer.open {
+  transform: translateY(0%);
+}
+#battle-drawer .drawer-header {
+  padding: 6px 14px;
+  background: #101018;
+  border-bottom: 1px dashed #444;
+  font-size: 13px;
+  color: #bbb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+#battle-log {
+  flex: 1;
+  padding: 12px 14px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+#battle-drawer .drawer-footer-handle {
+  height: 5px;
+  background: repeating-linear-gradient(90deg, #444 0px, #444 8px, transparent 8px, transparent 14px);
+}
+
+/* 雙行戰報小卡片（第 2 行直接顯示算式，無「└ 算式：」前綴） */
+.combat-report {
+  border-left: 3px solid #4da6ff;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 6px 10px;
+  margin-bottom: 10px;
+}
+.combat-report.enemy-atk {
+  border-left-color: #ff5c5c;
+}
+.combat-report .line-main {
+  font-weight: bold;
+  color: #fff;
+  margin-bottom: 2px;
+}
+.combat-report .line-formula {
+  font-size: 13.5px;
+  color: #9e9e9e;
+}
+
+/* ===== 歷史對話視窗（戰鬥標題使用粗體，不使用金色） ===== */
+#history-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.modal-box {
+  width: 100%;
+  max-width: 680px;
+  height: 80vh;
+  background: #050508;
+  border: 1px solid #e8e8e8;
+  display: flex;
+  flex-direction: column;
+}
+.modal-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid #444;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: bold;
+}
+.modal-body {
+  flex: 1;
+  padding: 12px 14px;
+  overflow-y: auto;
+  font-size: 14.5px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.modal-body p {
+  margin-bottom: 6px;
+}
+.history-battle-header {
+  margin: 12px 0 6px;
+  padding: 4px 8px;
+  background: #141418;
+  border-left: 3px solid #e8e8e8;
+  color: #fff;
+  font-weight: bold;
+}
+
+/* ===== 第 4 部分：按鈕選項區（維持上下堆疊模式 + 極簡單行文字） ===== */
 #choices {
   display: flex;
   flex-direction: column;
@@ -67,7 +349,7 @@ body {
   border: 1px solid #e8e8e8;
   font-family: inherit;
   font-size: 16px;
-  padding: 12px 14px;
+  padding: 11px 14px;
   text-align: left;
   cursor: pointer;
 }
@@ -89,8 +371,11 @@ body {
 
 @media (max-width: 480px) {
   body { font-size: 15px; }
-  #game { padding: 10px; gap: 8px; }
-  #status { gap: 0 12px; padding: 8px 10px; font-size: 14px; }
+  #game { padding: 8px 10px; gap: 8px; }
+  #status, #enemy-panel { padding: 8px 10px; font-size: 14px; }
+  .bars-row { gap: 8px; }
+  .stats-quad-row { font-size: 13px; }
+  #choices button { padding: 10px 12px; font-size: 15px; }
 }
 
 /* ===== 標題畫面 / 遊戲介紹畫面 ===== */
@@ -131,7 +416,7 @@ body {
 
 /* ===== 擲骰動畫 ===== */
 #dice {
-  position: fixed; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center;
+  position: fixed; inset: 0; z-index: 15; display: flex; align-items: center; justify-content: center;
   background: rgba(0,0,0,0.6); opacity: 0; pointer-events: none; transition: opacity 120ms ease;
 }
 #dice.show { opacity: 1; pointer-events: all; }
@@ -156,7 +441,7 @@ body {
 
 /* ===== 勇者揮劍 ===== */
 #sword {
-  position: fixed; inset: 0; z-index: 6; pointer-events: none; display: none;
+  position: fixed; inset: 0; z-index: 16; pointer-events: none; display: none;
   align-items: center; justify-content: center;
 }
 #sword.show { display: flex; }
@@ -183,8 +468,8 @@ body {
 }
 
 /* ===== 受到攻擊：金光（無傷）／搖動＋紅光（受傷） ===== */
-#log.glow-gold { animation: glowGold var(--hit-ms, 500ms) ease-out; }
-#log.glow-red { animation: glowRed var(--hit-ms, 500ms) ease-out; }
+#dialogue-stage.glow-gold, #log.glow-gold { animation: glowGold var(--hit-ms, 500ms) ease-out; }
+#dialogue-stage.glow-red, #log.glow-red { animation: glowRed var(--hit-ms, 500ms) ease-out; }
 @keyframes glowGold {
   0% { box-shadow: 0 0 0 0 transparent; border-color: #555; }
   35% { box-shadow: 0 0 18px 4px var(--gold, #ffd23f), inset 0 0 12px var(--gold, #ffd23f); border-color: var(--gold, #ffd23f); }
@@ -211,7 +496,7 @@ body {
 
 /* ===== 魔王出現動畫 ===== */
 #boss-appear {
-  position: fixed; inset: 0; z-index: 7; pointer-events: none; display: none;
+  position: fixed; inset: 0; z-index: 17; pointer-events: none; display: none;
   align-items: center; justify-content: center; background: rgba(0,0,0,0.5);
 }
 #boss-appear.show { display: flex; }
@@ -227,7 +512,7 @@ body {
 
 /* ===== 劇情文字動畫 ===== */
 #story {
-  position: fixed; inset: 0; z-index: 8; display: none;
+  position: fixed; inset: 0; z-index: 18; display: none;
   align-items: center; justify-content: center;
   background: rgba(0,0,0,0); pointer-events: all;
 }
@@ -243,7 +528,7 @@ body {
 #fade {
   position: fixed; inset: 0; background: #000; pointer-events: none;
   opacity: 0; transition: opacity var(--fade-ms, 300ms) ease;
-  z-index: 10;
+  z-index: 20;
 }
 #fade.on { opacity: 1; pointer-events: all; }
 #fade .scan {
@@ -263,7 +548,6 @@ body {
   .screen { padding: 10px; }
 }
 
-
 /* ===== 模式選擇提示（按下開始遊戲後顯示） ===== */
 .mode-prompt {
   color: #fff;
@@ -277,7 +561,7 @@ body {
 #poker-draw {
   position: fixed;
   inset: 0;
-  z-index: 5;
+  z-index: 15;
   display: flex;
   align-items: center;
   justify-content: center;

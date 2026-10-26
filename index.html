@@ -89,8 +89,32 @@
 
 <div id="game" class="hidden">
   <div id="status"></div>
-  <div id="log" aria-live="polite"></div>
+  <div id="enemy-panel" class="hidden"></div>
+  <div id="dialogue-stage">
+    <div id="log" aria-live="polite"></div>
+    <div id="battle-intro-overlay" aria-hidden="true">
+      <div class="intro-text" id="battle-intro-text">戰鬥開始了！！！</div>
+    </div>
+    <div id="battle-drawer" aria-live="polite">
+      <div class="drawer-header">
+        <span id="battle-drawer-title"></span>
+      </div>
+      <div id="battle-log"></div>
+      <div class="drawer-footer-handle"></div>
+    </div>
+  </div>
   <div id="choices"></div>
+</div>
+
+<!-- 歷史對話視窗 -->
+<div id="history-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="history-modal-title">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span id="history-modal-title">歷史對話紀錄</span>
+      <button type="button" id="btn-close-history" class="mini-btn">✕ 關閉</button>
+    </div>
+    <div class="modal-body" id="history-content"></div>
+  </div>
 </div>
 
 <script src="config.js"></script>

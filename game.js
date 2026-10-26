@@ -1,15 +1,27 @@
 /* =========================================================
-   遊戲核心狀態與邏輯 (game.js)
-   包含：1–5 層 6 回合抽取庫、物/魔雙攻防、5 格常駐裝備欄（含飾品）、
-   一階段魔王意識掙扎、二階段真魔王心魔戰、勇者之劍與徒手彩蛋
+   遊戲核心狀態與邏輯 (game.js - 第六版 v6)
+   包含：1–5 層 6 回合爬塔、物/魔雙攻防、可收合 5 格裝備抽屜、
+   勇者與敵人生命/護盾雙動態條與外框微光、頂部拉下／底部收回戰鬥對話框、
+   無前綴雙行戰報、歷史對話視窗、雙模式（骰子／撲克）、二階段真魔王心魔戰
    ========================================================= */
 let hero, floor, round, turn, floorDeck, enemy, gameOver;
 let gameMode = "dice"; // "dice" (舊版 0–20 骰子模式) 或 "poker" (新版 1–13 撲克模式)
 let lastDrawnCard = null; // 紀錄最近一次抽出的撲克牌資訊（供後續飾品與技能花色連動）
+let equipExpanded = false; // 頂部裝備抽屜展開狀態
+let isBattleDrawerActive = false; // 是否正在拉下的戰鬥對話框中輸出
+let historyLogs = []; // 歷史對話紀錄（包含一般對話、戰鬥標題、戰鬥對話與雙行戰報）
 
 const $status = document.getElementById("status");
+const $enemyPanel = document.getElementById("enemy-panel");
+const $dialogueStage = document.getElementById("dialogue-stage");
 const $log = document.getElementById("log");
+const $battleIntroOverlay = document.getElementById("battle-intro-overlay");
+const $battleDrawer = document.getElementById("battle-drawer");
+const $battleDrawerTitle = document.getElementById("battle-drawer-title");
+const $battleLog = document.getElementById("battle-log");
 const $choices = document.getElementById("choices");
+const $historyModal = document.getElementById("history-modal");
+const $historyContent = document.getElementById("history-content");
 
 /* ===== 小工具 ===== */
 function escapeHtml(t) {
@@ -42,6 +54,16 @@ function colorize(html) {
       : "";
     return `<span class="name${isBoss}" style="color:${ENEMY_COLORS[rawKey] || "#ff5c5c"}">${m}</span>`;
   });
+}
+
+// 將 #rrggbb 色碼轉為 rgba 字串，供敵人對戰卡外框微光使用
+function hexToRgba(hex, alpha) {
+  const clean = String(hex || "#ff5c5c").replace("#", "");
+  if (clean.length !== 6) return `rgba(255, 92, 92, ${alpha})`;
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function rollD20() { return Math.floor(Math.random() * 21); } // 0–20
@@ -93,6 +115,7 @@ function renderPokerCardHtml(card) {
   }
   return `<div class="poker-card ${card.suit.colorClass}"><div class="card-corner top-left"><span class="corner-rank">${r}</span><span class="corner-suit">${s}</span></div><div class="card-center">${centerContent}</div><div class="card-corner bottom-right"><span class="corner-rank">${r}</span><span class="corner-suit">${s}</span></div></div>`;
 }
+
 function randomPick(list) { return list[Math.floor(Math.random() * list.length)]; }
 function weightedPick(list) {
   const total = list.reduce((s, x) => s + x.weight, 0);
@@ -144,22 +167,91 @@ function getFloorInfo(fl) {
   return FLOORS.find(f => f.floor === fl) || { floor: fl, name: `第 ${fl} 層`, desc: "" };
 }
 
-function cardTypeName(type) {
-  if (type === "monster") return "打鬥牌";
-  if (type === "camp") return "回復牌";
-  if (type === "skill_camp") return "技能牌(暫代回復)";
-  return "事件牌";
+/* ===== 畫面輸出（一般對話框 + 戰鬥拉簾對話框 + 歷史對話紀錄） ===== */
+function log(text, cls) {
+  const html = colorize(escapeHtml(text));
+  const p = document.createElement("p");
+  p.innerHTML = html;
+  if (cls) p.className = cls;
+
+  const targetBox = (isBattleDrawerActive && $battleLog) ? $battleLog : $log;
+  targetBox.appendChild(p);
+  targetBox.scrollTop = targetBox.scrollHeight;
+
+  historyLogs.push({
+    kind: isBattleDrawerActive ? "battle" : "general",
+    html,
+    cls: cls || "",
+  });
 }
 
-/* ===== 畫面輸出 ===== */
-function log(text, cls) {
-  const p = document.createElement("p");
-  p.innerHTML = colorize(escapeHtml(text));
-  if (cls) p.className = cls;
-  $log.appendChild(p);
-  $log.scrollTop = $log.scrollHeight;
-}
 function sep() { log("────────────────────────", "sep"); }
+
+// 雙行戰報輸出（第 1 行：招式與總傷害結果；第 2 行：無「└ 算式：」前綴之純算式）
+function logCombatReport(isHero, mainText, formulaText) {
+  const mainHtml = colorize(escapeHtml(mainText));
+  const formulaHtml = colorize(escapeHtml(formulaText));
+  const div = document.createElement("div");
+  div.className = "combat-report" + (isHero ? "" : " enemy-atk");
+  div.innerHTML = `<div class="line-main">${mainHtml}</div><div class="line-formula">${formulaHtml}</div>`;
+
+  const targetBox = (isBattleDrawerActive && $battleLog) ? $battleLog : $log;
+  targetBox.appendChild(div);
+  targetBox.scrollTop = targetBox.scrollHeight;
+
+  historyLogs.push({
+    kind: "combat_report",
+    isHero,
+    mainHtml,
+    formulaHtml,
+  });
+}
+
+function openHistoryModal() {
+  if (!$historyModal || !$historyContent) return;
+  $historyContent.innerHTML = "";
+  if (historyLogs.length === 0) {
+    const emptyP = document.createElement("p");
+    emptyP.className = "dim";
+    emptyP.textContent = "目前尚無歷史對話紀錄。";
+    $historyContent.appendChild(emptyP);
+  } else {
+    historyLogs.forEach(entry => {
+      if (entry.kind === "battle_header") {
+        const h = document.createElement("div");
+        h.className = "history-battle-header";
+        h.innerHTML = colorize(escapeHtml(entry.title));
+        $historyContent.appendChild(h);
+      } else if (entry.kind === "combat_report") {
+        const div = document.createElement("div");
+        div.className = "combat-report" + (entry.isHero ? "" : " enemy-atk");
+        div.innerHTML = `<div class="line-main">${entry.mainHtml}</div><div class="line-formula">${entry.formulaHtml}</div>`;
+        $historyContent.appendChild(div);
+      } else {
+        const p = document.createElement("p");
+        if (entry.cls) p.className = entry.cls;
+        p.innerHTML = entry.html;
+        $historyContent.appendChild(p);
+      }
+    });
+  }
+  $historyModal.classList.remove("hidden");
+  $historyContent.scrollTop = $historyContent.scrollHeight;
+}
+
+function closeHistoryModal() {
+  if ($historyModal) $historyModal.classList.add("hidden");
+}
+
+const $btnCloseHistory = document.getElementById("btn-close-history");
+if ($btnCloseHistory) {
+  $btnCloseHistory.onclick = closeHistoryModal;
+}
+if ($historyModal) {
+  $historyModal.addEventListener("click", e => {
+    if (e.target === $historyModal) closeHistoryModal();
+  });
+}
 
 function setChoices(list) {
   if (document.activeElement && typeof document.activeElement.blur === "function") {
@@ -177,44 +269,127 @@ function setChoices(list) {
   });
 }
 
+// 渲染第 1 部分（頂部勇者資訊欄）與第 2 部分（獨立 3 行敵人對戰卡）
 function renderStatus() {
   const s = calcStats(HERO_BASE, hero.equip, true);
   const curShield = enemy ? hero.shield : s.shield;
+  const maxShield = s.shield;
+  const hpCur = Math.max(0, hero.hp);
+  const hpPct = hero.maxHp > 0 ? Math.max(0, Math.min(100, (hpCur / hero.maxHp) * 100)) : 0;
+  const shPct = maxShield > 0 ? Math.max(0, Math.min(100, (Math.max(0, curShield) / maxShield) * 100)) : 0;
+
   const fInfo = getFloorInfo(floor);
   const modeTag = gameMode === "poker" ? "［撲克模式］" : "［骰子模式］";
   const stageTitle = (enemy && enemy.isPhase2Boss)
     ? `勇者${modeTag}　精神世界【心魔決戰】`
     : `勇者${modeTag}　第 ${floor} 層【${fInfo.name}】　第 ${round} / ${ROUNDS_PER_FLOOR} 回合`;
-  const deckText = floorDeck && floorDeck.length > 0
-    ? floorDeck.map(c => cardTypeName(c.type)).join("、")
-    : (round === ROUNDS_PER_FLOOR ? (floor < MAX_FLOOR ? "【傳送門 + 寶箱】" : "【終局魔王戰】") : "無");
 
-  let html = `
-    <div class="title">${stageTitle}</div>
-    <div>生命：${Math.max(0, hero.hp)} / ${hero.maxHp}</div>
-    <div>護盾：${curShield} / ${s.shield}</div>
-    <div>物攻：${s.physAtk}　魔攻：${s.magAtk}</div>
-    <div>物防：${s.physDef}　魔防：${s.magDef}</div>
-    <div class="full">物理武器：${itemText(hero.equip.physWeapon)}</div>
-    <div class="full">魔法武器：${itemText(hero.equip.magWeapon)}</div>
-    <div class="full">裝甲：${itemText(hero.equip.armor)}</div>
-    <div class="full">盾牌：${itemText(hero.equip.shield)}</div>
-    <div class="full">飾品：${itemText(hero.equip.accessory)}</div>
-    <div class="full dim">本層抽取庫剩餘（${floorDeck ? floorDeck.length : 0} 張）：${deckText}</div>`;
+  const equipBtnLabel = equipExpanded ? "裝備 ▲" : "裝備 ▼";
+  const equipBtnActive = equipExpanded ? " active" : "";
+  const drawerHidden = equipExpanded ? "" : " hidden";
 
-  if (enemy) {
+  const statusHtml = `
+    <div class="panel-row-top">
+      <div class="panel-title">${colorize(escapeHtml(stageTitle))}</div>
+      <div class="header-actions">
+        <button type="button" class="mini-btn${equipBtnActive}" id="btn-toggle-equip">${equipBtnLabel}</button>
+        <button type="button" class="mini-btn" id="btn-open-history">歷史對話</button>
+      </div>
+    </div>
+    <div class="bars-row">
+      <div class="stat-bar-group">
+        <span class="stat-label">生命</span>
+        <div class="bar-track"><div class="bar-fill hp-hero" style="width:${hpPct}%"></div></div>
+        <span class="stat-num">${hpCur} / ${hero.maxHp}</span>
+      </div>
+      <div class="stat-bar-group">
+        <span class="stat-label">護盾</span>
+        <div class="bar-track"><div class="bar-fill shield-fill" style="width:${shPct}%"></div></div>
+        <span class="stat-num">${Math.max(0, curShield)} / ${maxShield}</span>
+      </div>
+    </div>
+    <div class="stats-quad-row">
+      <div class="stat-cell">物攻 <span class="val">${s.physAtk}</span></div>
+      <div class="stat-cell">魔攻 <span class="val">${s.magAtk}</span></div>
+      <div class="stat-cell">物防 <span class="val">${s.physDef}</span></div>
+      <div class="stat-cell">魔防 <span class="val">${s.magDef}</span></div>
+    </div>
+    <div id="equip-drawer" class="${drawerHidden.trim()}">
+      <div>物理武器：${escapeHtml(itemText(hero.equip.physWeapon))}</div>
+      <div>魔法武器：${escapeHtml(itemText(hero.equip.magWeapon))}</div>
+      <div>裝甲：${escapeHtml(itemText(hero.equip.armor))}</div>
+      <div>盾牌：${escapeHtml(itemText(hero.equip.shield))}</div>
+      <div>飾品：${escapeHtml(itemText(hero.equip.accessory))}</div>
+    </div>`;
+
+  $status.innerHTML = statusHtml;
+
+  const $btnEquip = document.getElementById("btn-toggle-equip");
+  if ($btnEquip) {
+    $btnEquip.onclick = () => {
+      equipExpanded = !equipExpanded;
+      renderStatus();
+    };
+  }
+  const $btnHist = document.getElementById("btn-open-history");
+  if ($btnHist) {
+    $btnHist.onclick = openHistoryModal;
+  }
+
+  // 第 2 部分：獨立 3 行「敵人對戰卡」（依敵人名字顏色變換外框微光）
+  if (enemy && $enemyPanel) {
+    const eColor = ENEMY_COLORS[enemy.name] || "#ff5c5c";
+    $enemyPanel.style.setProperty("--enemy-glow", eColor);
+    $enemyPanel.style.setProperty("--enemy-glow-soft", hexToRgba(eColor, 0.42));
+    $enemyPanel.style.setProperty("--enemy-glow-inset", hexToRgba(eColor, 0.14));
+
     const weakNote = enemy.weakness === "phys"
       ? "［破綻：物防減半］"
       : (enemy.weakness === "mag" ? "［破綻：魔防減半］" : (enemy.inRage ? "［狂暴：攻擊×1.5］" : ""));
-    const atkSummary = enemy.type === "phys"
-      ? `物攻 ${enemy.physAtk}`
-      : (enemy.type === "mag" ? `魔攻 ${enemy.magAtk}` : `物攻 ${enemy.physAtk}／魔攻 ${enemy.magAtk}`);
-    html += `<div class="full enemy-bar">── 敵人：${enemy.name}${weakNote}　生命 ${Math.max(0, enemy.hp)} / ${enemy.maxHp}　護盾 ${enemy.shield}　${atkSummary}　物防 ${enemy.curPhysDef}　魔防 ${enemy.curMagDef}</div>`;
+
+    const eHpCur = Math.max(0, enemy.hp);
+    const eHpPct = enemy.maxHp > 0 ? Math.max(0, Math.min(100, (eHpCur / enemy.maxHp) * 100)) : 0;
+    const eShMax = enemy.maxShield || 0;
+    const eShCur = Math.max(0, enemy.shield);
+    const eShPct = eShMax > 0 ? Math.max(0, Math.min(100, (eShCur / eShMax) * 100)) : 0;
+
+    const pDefHtml = enemy.weakness === "phys"
+      ? `<span class="debuff">${enemy.curPhysDef}↓</span>`
+      : `<span class="val">${enemy.curPhysDef}</span>`;
+    const mDefHtml = enemy.weakness === "mag"
+      ? `<span class="debuff">${enemy.curMagDef}↓</span>`
+      : `<span class="val">${enemy.curMagDef}</span>`;
+
+    $enemyPanel.innerHTML = `
+      <div class="panel-row-top">
+        <div class="panel-title">敵人：${colorize(escapeHtml(enemy.name))}</div>
+        <div class="enemy-tag">${escapeHtml(weakNote)}</div>
+      </div>
+      <div class="bars-row">
+        <div class="stat-bar-group">
+          <span class="stat-label">生命</span>
+          <div class="bar-track"><div class="bar-fill hp-enemy" style="width:${eHpPct}%"></div></div>
+          <span class="stat-num">${eHpCur} / ${enemy.maxHp}</span>
+        </div>
+        <div class="stat-bar-group">
+          <span class="stat-label">護盾</span>
+          <div class="bar-track"><div class="bar-fill shield-fill" style="width:${eShPct}%"></div></div>
+          <span class="stat-num">${eShCur} / ${eShMax}</span>
+        </div>
+      </div>
+      <div class="stats-quad-row">
+        <div class="stat-cell">物攻 <span class="val">${enemy.physAtk}</span></div>
+        <div class="stat-cell">魔攻 <span class="val">${enemy.magAtk}</span></div>
+        <div class="stat-cell">物防 ${pDefHtml}</div>
+        <div class="stat-cell">魔防 ${mDefHtml}</div>
+      </div>`;
+    $enemyPanel.classList.remove("hidden");
+  } else if ($enemyPanel) {
+    $enemyPanel.classList.add("hidden");
   }
-  $status.innerHTML = colorize(html);
 }
 
-/* ===== 擲骰與戰鬥效果動畫 ===== */
+/* ===== 擲骰、抽撲克牌、戰鬥拉簾對話框與戰鬥效果動畫 ===== */
 const $dice = document.getElementById("dice");
 const $pokerDraw = document.getElementById("poker-draw");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -224,6 +399,45 @@ if ($pokerDraw) {
   $pokerDraw.querySelectorAll(".deck-card, .drawn-face.back").forEach(el => {
     el.innerHTML = renderCardBackHtml();
   });
+}
+
+// 進入戰鬥動畫：先顯示「戰鬥開始了！！！」並漸漸消失，隨後從頂部拉下戰鬥對話框
+async function openBattleDrawerAnim(enemyName) {
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if ($battleLog) $battleLog.innerHTML = "";
+  if ($battleDrawerTitle) {
+    $battleDrawerTitle.innerHTML = colorize(`與 ${escapeHtml(enemyName)} 的戰鬥`);
+  }
+
+  if ($battleIntroOverlay && !reduce) {
+    const $txt = document.getElementById("battle-intro-text");
+    if ($txt) $txt.textContent = BATTLE_INTRO_TEXT;
+    $battleIntroOverlay.classList.remove("active");
+    void $battleIntroOverlay.offsetWidth;
+    $battleIntroOverlay.classList.add("active");
+    await sleep(BATTLE_INTRO_MS);
+    $battleIntroOverlay.classList.remove("active");
+  }
+
+  if ($battleDrawer) {
+    $battleDrawer.classList.add("open");
+    if (!reduce) {
+      await sleep(BATTLE_DRAWER_MS);
+    }
+  }
+  isBattleDrawerActive = true;
+}
+
+// 戰鬥結束動畫：從底部往上收回戰鬥對話框
+async function closeBattleDrawerAnim() {
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  isBattleDrawerActive = false;
+  if ($battleDrawer && $battleDrawer.classList.contains("open")) {
+    $battleDrawer.classList.remove("open");
+    if (!reduce) {
+      await sleep(BATTLE_DRAWER_MS);
+    }
+  }
 }
 
 async function rollPokerAnim(who, color, card, note) {
@@ -327,7 +541,7 @@ async function storyBg(from, to, ms) {
   await a.finished;
 }
 
-// 通用黑幕文字消失演出：畫面變暗 → 依序在畫面中心浮現每句文字並漸漸增加透明度直到完全消失 → 畫面亮度回復正常（或維持黑幕交由後續轉場）
+// 通用黑幕文字消失演出：畫面變暗 → 依序在畫面中心浮現每句文字並漸漸增加透明度直到完全消失 → 畫面亮度回復正常
 async function playStorySequence(lines, darkness = DEFEAT_DARKNESS, restoreBrightness = true) {
   const $s = document.getElementById("story");
   $s.getAnimations().forEach(a => a.cancel());
@@ -381,24 +595,25 @@ async function swordAnim() {
 
 async function heroHitAnim(lostHp) {
   const $g = document.getElementById("game");
-  $log.classList.remove("glow-gold", "glow-red");
+  const $box = $dialogueStage || $log;
+  $box.classList.remove("glow-gold", "glow-red");
   $g.classList.remove("shake");
   if (lostHp) {
-    replayClass($log, "glow-red");
+    replayClass($box, "glow-red");
     replayClass($g, "shake");
   } else {
-    replayClass($log, "glow-gold");
+    replayClass($box, "glow-gold");
   }
   await sleep(HIT_MS);
-  $log.classList.remove("glow-gold", "glow-red");
+  $box.classList.remove("glow-gold", "glow-red");
   $g.classList.remove("shake");
 }
 
 /* =========================================================
-   1–5 層抽取庫與爬塔流程
+   1–5 層幕後事件池與爬塔流程（已全面隱藏牌庫顯示與相關對白）
    ========================================================= */
 
-// 建立單層的 5 張牌抽取庫（4 張固定牌 + 1 張隨機牌）
+// 建立單層的 5 個幕後遭遇事件（對玩家隱藏牌庫概念，保留「（暫代技能）」字樣）
 function buildFloorDeck(fl) {
   const rawTypes = [...FIXED_FLOOR_CARDS, randomPick(RANDOM_FIFTH_POOL)];
   const monsters = FLOOR_MONSTERS[fl] || FLOOR_MONSTERS[1];
@@ -409,25 +624,25 @@ function buildFloorDeck(fl) {
         id: `fl${fl}_card${idx}_${Math.random()}`,
         type: "monster",
         monster: m,
-        label: `【打鬥牌】遭遇${m.name}，迎戰`,
+        label: `遭遇${m.name}，迎戰`,
       };
     } else if (type === "camp") {
       return {
         id: `fl${fl}_card${idx}_${Math.random()}`,
         type: "camp",
-        label: "【回復牌】在營地生火休息，生命回滿",
+        label: "在營地生火休息，生命回滿",
       };
     } else {
       return {
         id: `fl${fl}_card${idx}_${Math.random()}`,
         type: "skill_camp",
-        label: "【技能牌（暫代：回復）】在殘頁篝火旁調息，生命回滿",
+        label: "在殘頁篝火旁調息，生命回滿（暫代技能）",
       };
     }
   });
 }
 
-// 從當前樓層抽取庫隨機抽取 count 張不重複的牌
+// 從當前樓層事件池隨機抽取 count 個不重複的事件
 function drawFromDeck(deck, count) {
   const indices = deck.map((_, i) => i);
   for (let i = indices.length - 1; i > 0; i--) {
@@ -442,6 +657,13 @@ function newGame(selectedMode) {
     gameMode = selectedMode;
   }
   lastDrawnCard = null;
+  equipExpanded = false;
+  isBattleDrawerActive = false;
+  historyLogs = [];
+  if ($battleDrawer) $battleDrawer.classList.remove("open");
+  if ($battleLog) $battleLog.innerHTML = "";
+  closeHistoryModal();
+
   hero = {
     hp: HERO_BASE.hp,
     maxHp: HERO_BASE.hp,
@@ -466,7 +688,7 @@ function newGame(selectedMode) {
   presentRound();
 }
 
-// 顯示當前樓層與回合的選項
+// 顯示當前樓層與回合的選項（完全不提及牌庫／抽取庫）
 function presentRound() {
   enemy = null;
   renderStatus();
@@ -505,12 +727,12 @@ function presentRound() {
     return;
   }
 
-  // 第 1–5 回合：從本層抽取庫隨機抽取 2 張牌（第 5 回合只剩 1 張牌）
+  // 第 1–5 回合：二選一遭遇（第 5 回合為本層最後一段路途）
   const drawn = drawFromDeck(floorDeck, 2);
   if (drawn.length > 1) {
-    log(`從本層抽取庫（剩餘 ${floorDeck.length} 張）隨機抽出 2 張牌，請選擇一張前進（選中後該牌會從抽取庫消失）：`);
+    log("前方出現了兩條分岔的道路，請選擇你的下一步行動：");
   } else {
-    log("本層抽取庫只剩下最後 1 張牌：");
+    log("前方只剩下本層的最後一段路途：");
   }
 
   setChoices(
@@ -521,7 +743,7 @@ function presentRound() {
   );
 }
 
-// 玩家選擇一張牌後，將該張牌從抽取庫移除並執行
+// 玩家選擇一個行動後執行
 function selectCard(card) {
   const idx = floorDeck.findIndex(c => c.id === card.id);
   if (idx !== -1) floorDeck.splice(idx, 1);
@@ -542,12 +764,12 @@ function advanceAfterEvent() {
   presentRound();
 }
 
-/* ===== 營地回復（含暫代技能牌的回復） ===== */
+/* ===== 營地回復（含暫代技能的回復） ===== */
 function camp(isSkillPlaceholder) {
   const healed = hero.maxHp - hero.hp;
   hero.hp = hero.maxHp;
   if (isSkillPlaceholder) {
-    log(`【技能牌（暫以回復代替）】你在殘頁篝火旁靜心調息。生命回復 ${healed} 點，現在是 ${hero.hp} / ${hero.maxHp}。`);
+    log(`你在殘頁篝火旁靜心調息（暫代技能）。生命回復 ${healed} 點，現在是 ${hero.hp} / ${hero.maxHp}。`);
   } else {
     log(`你在營地生火休息。生命回復 ${healed} 點，現在是 ${hero.hp} / ${hero.maxHp}。`);
   }
@@ -555,7 +777,7 @@ function camp(isSkillPlaceholder) {
   setChoices([{ label: "繼續前進", action: advanceAfterEvent }]);
 }
 
-/* ===== 第 6 回合：跨層寶箱與傳送門推進 ===== */
+/* ===== 第 6 回合：跨層寶箱與傳送門推進（每過一層清空一般對話框） ===== */
 function openFloorChest() {
   const pool = FLOOR_CHEST_ITEMS[floor] || FLOOR_CHEST_ITEMS[1];
   const item = randomPick(pool);
@@ -570,10 +792,12 @@ function enterNextFloorPortal() {
   hero.maxHp += FLOOR_HP_BONUS;
   hero.hp = Math.min(hero.maxHp, hero.hp + FLOOR_HP_BONUS);
   const fInfo = getFloorInfo(floor);
-  sep();
+
+  // 每層清空一次一般對話框（歷史紀錄仍完整保留於 historyLogs）
+  $log.innerHTML = "";
   log(`你踏入傳送門，成功抵達第 ${floor} 層【${fInfo.name}】！`, "big");
   log(`跨層祝福發動：勇者最大生命 +${FLOOR_HP_BONUS}，並回復 ${FLOOR_HP_BONUS} 點生命（目前生命 ${hero.hp} / ${hero.maxHp}）。`, "hit");
-  log(`【${fInfo.name}】${fInfo.desc}`);
+  log(`── 進入第 ${floor} 層【${fInfo.name}】：${fInfo.desc}`, "big");
   presentRound();
 }
 
@@ -608,11 +832,10 @@ function offerItem(item, onDone) {
 }
 
 /* =========================================================
-   戰鬥系統（雙武器切換、雙防禦結算、渾沌怪動態弱點、二階段心魔戰）
+   戰鬥系統（拉簾戰鬥對話框、無前綴雙行戰報、極簡上下按鈕）
    ========================================================= */
 
 // 更新渾沌怪每回合動態排斥弱點（隨機物防減半或魔防減半）
-// 註：二階段真魔王雖為特別渾沌怪，但設定為「不減半防禦」
 function refreshChaosWeakness(announce) {
   if (!enemy || enemy.type !== "chaos" || enemy.isPhase2Boss) return;
   enemy.weakness = Math.random() < 0.5 ? "phys" : "mag";
@@ -631,19 +854,19 @@ function refreshChaosWeakness(announce) {
   }
 }
 
+// 第 4 部分：採用方案 B 極簡單行文字，並維持上下堆疊模式（預留未來局內技能空間）
 function showCombatButtons() {
   if (!enemy || hero.hp <= 0) return;
-  const s = calcStats(HERO_BASE, hero.equip, true);
   const wPhys = hero.equip.physWeapon ? hero.equip.physWeapon.name : "徒手";
   const wMag = hero.equip.magWeapon ? hero.equip.magWeapon.name : "基礎魔力";
   const swordTag = (hero.equip.accessory && hero.equip.accessory.isHeroSword) ? "［勇者之劍×1.5］" : "";
   setChoices([
     {
-      label: `【物理攻擊】使用${wPhys}${swordTag}（物攻 ${s.physAtk} vs 敵物防 ${enemy.curPhysDef}）`,
+      label: `【物理攻擊】使用${wPhys}${swordTag}`,
       action: () => heroAttack("phys"),
     },
     {
-      label: `【魔法攻擊】使用${wMag}${swordTag}（魔攻 ${s.magAtk} vs 敵魔防 ${enemy.curMagDef}）`,
+      label: `【魔法攻擊】使用${wMag}${swordTag}`,
       action: () => heroAttack("mag"),
     },
   ]);
@@ -651,7 +874,7 @@ function showCombatButtons() {
 
 async function startBattle(template) {
   if (template.isPhase2Boss) {
-    // 二階段真魔王：除生命（140）與飾品（勇者之劍）外，完全 1:1 鏡像複製勇者（含基礎 8 點雙攻雙防＋4 件文字裝備），且不減半防禦
+    // 二階段真魔王：除生命（140）與飾品（勇者之劍）外，完全 1:1 鏡像複製勇者，且不減半防禦
     const mirror = calcStats(HERO_BASE, hero.equip, false);
     enemy = {
       name: template.name,
@@ -669,6 +892,7 @@ async function startBattle(template) {
       curPhysDef: mirror.physDef,
       curMagDef: mirror.magDef,
       shield: mirror.shield,
+      maxShield: mirror.shield,
       weakness: null,
       halfHpTriggered: false,
       firstAttackDone: false,
@@ -695,6 +919,7 @@ async function startBattle(template) {
       curPhysDef: st.physDef,
       curMagDef: st.magDef,
       shield: st.shield,
+      maxShield: st.shield,
       weakness: null,
       halfHpTriggered: false,
       items: template.items,
@@ -706,10 +931,16 @@ async function startBattle(template) {
   setChoices([]);
   renderStatus();
 
-  const atkDesc = enemy.type === "phys"
-    ? `物攻 ${enemy.physAtk}`
-    : (enemy.type === "mag" ? `魔攻 ${enemy.magAtk}` : `物攻 ${enemy.physAtk}／魔攻 ${enemy.magAtk}`);
-  log(`戰鬥開始！對手是${enemy.name}（生命 ${enemy.hp}、${atkDesc}、物防 ${enemy.physDef}、魔防 ${enemy.magDef}、護盾 ${enemy.shield}）。`, "big");
+  // 於歷史對話中加入粗體標題「與XXX的戰鬥」
+  historyLogs.push({
+    kind: "battle_header",
+    title: `與 ${enemy.name} 的戰鬥`,
+  });
+
+  // 播放「戰鬥開始了！！！」漸隱動畫，並從對話框頂部拉下專屬戰鬥對話框
+  await openBattleDrawerAnim(enemy.name);
+
+  log(`對手是${enemy.name}！`, "big");
 
   if (enemy.isBoss) {
     log("魔王的力量有點奇怪，似乎不屬於這裏……", "text-curse");
@@ -751,8 +982,8 @@ async function startBattle(template) {
   showCombatButtons();
 }
 
-// 計算並套用傷害：先扣護盾，再扣生命
-function dealDamage(attackerName, atkType, atk, def, target, targetName, dice, cardInfo) {
+// 計算並套用傷害：回傳雙行戰報所需的「第 1 行主結果」與「第 2 行無前綴純算式」
+function dealDamage(attackerName, atkType, atk, def, target, dice, cardInfo) {
   const atkLabel = atkType === "mag" ? "魔法攻擊" : "物理攻擊";
   const defLabel = atkType === "mag" ? "魔防" : "物防";
   const dmg = Math.max(0, atk + dice - def);
@@ -764,15 +995,16 @@ function dealDamage(attackerName, atkType, atk, def, target, targetName, dice, c
   const rollExpr = cardInfo
     ? `撲克 ${dice}（${cardInfo.label}）`
     : `骰子 ${dice}`;
-  let msg = `${attackerName}發動${atkLabel}：${atk} + ${rollExpr} − ${defLabel} ${def} = ${dmg} 傷害`;
+
+  let mainLine = `${attackerName}發動【${atkLabel}】 ➔ 造成 ${dmg} 點傷害！`;
   if (dmg > 0) {
     const parts = [];
     if (toShield > 0) parts.push(`護盾 −${toShield}`);
     if (toHp > 0) parts.push(`生命 −${toHp}`);
-    msg += `（${parts.join("，")}）`;
+    mainLine += `（${parts.join("，")}）`;
   }
-  msg += `。${targetName}剩下生命 ${Math.max(0, target.hp)}、護盾 ${target.shield}。`;
-  return msg;
+  const formulaLine = `${atk} + ${rollExpr} − ${defLabel} ${def} = ${dmg} 傷害`;
+  return { mainLine, formulaLine };
 }
 
 async function heroAttack(atkType) {
@@ -799,7 +1031,8 @@ async function heroAttack(atkType) {
   await swordAnim();
 
   const heroTarget = { shield: enemy.shield, hp: enemy.hp };
-  log(dealDamage("勇者", atkType, atkVal, defVal, heroTarget, enemy.name, dice, drawnCard), "hit");
+  const report = dealDamage("勇者", atkType, atkVal, defVal, heroTarget, dice, drawnCard);
+  logCombatReport(true, report.mainLine, report.formulaLine);
   enemy.shield = heroTarget.shield;
   enemy.hp = heroTarget.hp;
   renderStatus();
@@ -818,13 +1051,16 @@ async function heroAttack(atkType) {
     log(`【異變】${enemy.name}的生命降至一半以下，體內殘存的意識開始劇烈甦醒！（掙扎機率提升至 ${Math.round(BOSS_STRUGGLE_CHANCE_LOW_HP * 100)}%）`, "text-curse");
   }
 
-  // 二階段真魔王半血顯露真名「文字.沙坦」並進入狂暴狀態（未計算前的攻擊力 ×1.5）
+  // 二階段真魔王半血顯露真名「文字.沙坦」並進入狂暴狀態（未計算前的攻擊力 ×1.5，面板外框微光同步轉為鮮紅）
   if (enemy.isPhase2Boss && !enemy.halfHpTriggered && enemy.hp <= enemy.maxHp * PHASE2_BOSS_RAGE_HP_RATIO) {
     enemy.halfHpTriggered = true;
     enemy.name = enemy.trueName || PHASE2_BOSS_TRUE_NAME;
     enemy.inRage = true;
     enemy.physAtk = Math.floor(enemy.physAtk * PHASE2_BOSS_RAGE_MULT);
     enemy.magAtk = Math.floor(enemy.magAtk * PHASE2_BOSS_RAGE_MULT);
+    if ($battleDrawerTitle) {
+      $battleDrawerTitle.innerHTML = colorize(`與 ${escapeHtml(enemy.name)} 的戰鬥`);
+    }
     log(`【真名顯露】隨着重創，真魔王身上的亂碼屏障碎裂，露出了它的真名——「${enemy.name}」！`, "big");
     log(`勇者：「原來魔王的名字叫${enemy.name}….」`, "hit");
     log(`${enemy.name}：「竟然被你看見了...那麼你就非死不可了！！」`, "text-curse");
@@ -854,11 +1090,11 @@ async function enemyAttack() {
         log(`【掙扎】${enemy.name}體內的殘存意識突然反抗，痛苦地抱住頭顱，攻擊揮空沒有造成傷害！`, "text-curse");
       } else {
         enemy.hp = Math.max(0, enemy.hp - BOSS_STRUGGLE_SELF_DMG);
-        log(`【掙扎】${enemy.name}體內的意識劇烈衝突，強行壓制失控的力量，反噬自身 ${BOSS_STRUGGLE_SELF_DMG} 點生命！${enemy.name}剩下生命 ${enemy.hp}、護盾 ${enemy.shield}。`, "text-curse");
+        log(`【掙扎】${enemy.name}體內的意識劇烈衝突，強行壓制失控的力量，反噬自身 ${BOSS_STRUGGLE_SELF_DMG} 點生命！`, "text-curse");
       }
       renderStatus();
       await sleep(HIT_MS);
-      if (enemy.hp <= 0) winBattle();
+      if (enemy.hp <= 0) await winBattle();
       return;
     }
   }
@@ -892,7 +1128,7 @@ async function enemyAttack() {
 
   const target = { shield: hero.shield, hp: hero.hp };
   const hpBefore = hero.hp;
-  const dmgMsg = dealDamage(enemy.name, atkType, atkVal, defVal, target, "勇者", dice, drawnCard);
+  const report = dealDamage(enemy.name, atkType, atkVal, defVal, target, dice, drawnCard);
 
   // 檢查是否觸發飾品【勇者之劍】殘魂免疫致命傷（最多 3 次，鎖 1 血）
   const acc = hero.equip.accessory;
@@ -900,7 +1136,7 @@ async function enemyAttack() {
     acc.blocksLeft--;
     hero.shield = 0;
     hero.hp = 1; // 保留 1 點生命（鎖 1 血）
-    log(dmgMsg, "hurt");
+    logCombatReport(false, report.mainLine, report.formulaLine);
     renderStatus();
 
     // 觸發「受到攻擊後生命值沒有減少」的視覺特效（面板周圍閃金光）
@@ -920,7 +1156,7 @@ async function enemyAttack() {
     return;
   }
 
-  log(dmgMsg, "hurt");
+  logCombatReport(false, report.mainLine, report.formulaLine);
   hero.shield = target.shield;
   hero.hp = target.hp;
   renderStatus();
@@ -930,10 +1166,13 @@ async function enemyAttack() {
 }
 
 async function winBattle() {
+  setChoices([]);
+  // 先播放「從底部收回戰鬥對話框」動畫，使後續劇情與掉寶回到外層一般對話框
+  await closeBattleDrawerAnim();
+
   // 一階段魔王被擊敗：判斷是否為「完全徒手通關彩蛋」或「進入二階段精神世界」
   if (enemy.isBoss) {
     enemy = null;
-    setChoices([]);
     renderStatus();
 
     // 隱藏彩蛋：全程未穿戴任何文字裝備（完全徒手／初始狀態）
@@ -975,7 +1214,6 @@ async function winBattle() {
   // 二階段真魔王（文字.沙坦）被擊敗：演出 4 句勝利結局文字消失動畫
   if (enemy.isPhase2Boss) {
     enemy = null;
-    setChoices([]);
     renderStatus();
     sep();
     for (const line of PHASE2_VICTORY_TEXTS) {
@@ -990,10 +1228,13 @@ async function winBattle() {
     return;
   }
 
-  log(`你打倒了${enemy.name}！`, "big");
-  const drop = randomPick(enemy.items);
-  log(`${enemy.name}掉落了一件${SLOT_NAME[drop.slot]}：${itemText(drop)}。`);
+  const defeatedEnemy = enemy;
   enemy = null;
+  renderStatus();
+
+  log(`你打倒了${defeatedEnemy.name}！`, "big");
+  const drop = randomPick(defeatedEnemy.items);
+  log(`${defeatedEnemy.name}掉落了一件${SLOT_NAME[drop.slot]}：${itemText(drop)}。`);
   offerItem(drop, advanceAfterEvent);
 }
 
@@ -1032,6 +1273,8 @@ document.documentElement.style.setProperty("--hit-ms", HIT_MS + "ms");
 document.documentElement.style.setProperty("--gold", GOLD_GLOW);
 document.documentElement.style.setProperty("--red", RED_GLOW);
 document.documentElement.style.setProperty("--scan-ms", SCAN_MS + "ms");
+document.documentElement.style.setProperty("--battle-intro-ms", BATTLE_INTRO_MS + "ms");
+document.documentElement.style.setProperty("--battle-drawer-ms", BATTLE_DRAWER_MS + "ms");
 document.getElementById("title-logo").textContent = TITLE_TEXT;
 document.getElementById("title-sub").textContent = TITLE_SUB;
 document.getElementById("intro-box").innerHTML = colorize(
@@ -1092,7 +1335,7 @@ function goGameWithMode(selectedMode) {
   });
 }
 
-// 標題畫面按下「開始遊戲」：展開【骰子模式（舊版本）】與【撲克模式（新版本）】兩個按鈕
+// 標題畫面按下「開始遊戲」：展開【骰子模式】與【撲克模式】兩個按鈕
 document.getElementById("btn-start").onclick = openTitleModeSelect;
 document.getElementById("btn-mode-dice").onclick = () => goGameWithMode("dice");
 document.getElementById("btn-mode-poker").onclick = () => goGameWithMode("poker");
