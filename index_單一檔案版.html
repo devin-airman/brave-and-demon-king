@@ -1,0 +1,3153 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>勇者與魔王</title>
+  <style>
+/* ===== 基本樣式：黑底白字終端機風格 ===== */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: #000;
+  color: #e8e8e8;
+  font-family: "Courier New", "Noto Sans Mono CJK TC", "Microsoft JhengHei", monospace;
+  font-size: 16px;
+  line-height: 1.6;
+  display: flex;
+  justify-content: center;
+}
+#game {
+  width: 100%;
+  max-width: 760px;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+  gap: 10px;
+}
+
+/* ===== 第 1 部分：頂部勇者資訊欄（微藍光外框 + 極簡 3 行 + 可展開裝備抽屜） ===== */
+#status {
+  background: #03060c;
+  border: 1px solid #4da6ff;
+  box-shadow: 0 0 12px rgba(77, 166, 255, 0.35), inset 0 0 8px rgba(77, 166, 255, 0.12);
+  padding: 9px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-radius: 2px;
+}
+
+.panel-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.panel-title {
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+.header-actions {
+  display: flex;
+  gap: 6px;
+}
+.mini-btn {
+  background: #000;
+  color: #e8e8e8;
+  border: 1px solid #888;
+  font-family: inherit;
+  font-size: 12.5px;
+  padding: 2px 8px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .mini-btn:hover {
+    border-color: #fff;
+    background: #222;
+  }
+}
+.mini-btn:active {
+  background: #262626;
+}
+.mini-btn.active {
+  border-color: #4da6ff;
+  color: #4da6ff;
+}
+
+/* 生命與護盾雙動態條（勇者與敵人共用） */
+.bars-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: center;
+}
+.stat-bar-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.stat-label {
+  white-space: nowrap;
+  font-weight: bold;
+}
+.bar-track {
+  flex: 1;
+  height: 11px;
+  background: #1a1a1a;
+  border: 1px solid #555;
+  position: relative;
+  overflow: hidden;
+  min-width: 50px;
+}
+.bar-fill {
+  height: 100%;
+  transition: width 240ms ease-out;
+}
+.bar-fill.hp-hero { background: #38d399; }
+.bar-fill.hp-enemy { background: #ff5252; }
+.bar-fill.shield-fill { background: #5bc0be; }
+.stat-num {
+  white-space: nowrap;
+  font-size: 13px;
+  min-width: 50px;
+  text-align: right;
+}
+
+/* 第 3 行：上下對齊的雙攻雙防四格列 */
+.stats-quad-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  font-size: 14px;
+  padding-top: 2px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.stat-cell {
+  white-space: nowrap;
+}
+.stat-cell .val {
+  font-weight: bold;
+  color: #fff;
+}
+.stat-cell .debuff {
+  color: #ffd23f;
+  font-weight: bold;
+}
+
+/* 5 格常駐裝備摺疊抽屜 */
+#equip-drawer {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(77, 166, 255, 0.45);
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: #d0d8e8;
+}
+
+/* ===== 第 2 部分：獨立 3 行「敵人對戰卡」（依敵人名字顏色變換外框微光） ===== */
+#enemy-panel {
+  background: #090406;
+  border: 1px solid var(--enemy-glow, #ff5c5c);
+  box-shadow: 0 0 12px var(--enemy-glow-soft, rgba(255, 92, 92, 0.38)),
+              inset 0 0 8px var(--enemy-glow-inset, rgba(255, 92, 92, 0.14));
+  padding: 9px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-radius: 2px;
+  transition: border-color 280ms ease, box-shadow 280ms ease;
+}
+.enemy-tag {
+  font-size: 13.5px;
+  color: #ffd23f;
+  font-weight: bold;
+}
+
+.dim { color: #8a8a8a; }
+
+/* ===== 第 3 部分：中間對話區（一般對話框 + 開戰文字漸隱 + 頂部拉下／底部收回戰鬥對話框） ===== */
+#dialogue-stage {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  border: 1px solid #555;
+  background: #000;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+#log {
+  flex: 1;
+  padding: 12px 14px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+#log p, #battle-log p { margin-bottom: 8px; }
+#log .sep, #battle-log .sep, #history-content .sep { color: #555; margin: 8px 0; }
+#log .hit, #battle-log .hit, #history-content .hit { color: #fff; }
+#log .hurt, #battle-log .hurt, #history-content .hurt { color: #bbb; }
+#log .big, #battle-log .big, #history-content .big { font-weight: bold; color: #fff; }
+#log .text-curse, #battle-log .text-curse, #history-content .text-curse { color: #c792ea; font-weight: bold; }
+
+/* 「戰鬥開始了！！！」文字出現並漸漸透明消失動畫層 */
+#battle-intro-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.84);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 12;
+  opacity: 0;
+  pointer-events: none;
+}
+#battle-intro-overlay.active {
+  pointer-events: all;
+  animation: battleIntroBg var(--battle-intro-ms, 1100ms) ease forwards;
+}
+#battle-intro-overlay .intro-text {
+  font-size: 26px;
+  font-weight: bold;
+  letter-spacing: 4px;
+  color: #fff;
+  text-shadow: 0 0 14px rgba(255, 255, 255, 0.55);
+  opacity: 0;
+}
+#battle-intro-overlay.active .intro-text {
+  animation: battleIntroText var(--battle-intro-ms, 1100ms) ease-in-out forwards;
+}
+@keyframes battleIntroBg {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes battleIntroText {
+  0% { opacity: 0; transform: scale(0.92); }
+  28% { opacity: 1; transform: scale(1.03); }
+  65% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.06); }
+}
+
+/* 從對話框頂部拉下、結束時從底部往上收回的專屬「戰鬥對話框」 */
+#battle-drawer {
+  position: absolute;
+  inset: 0;
+  background: #050508;
+  border-bottom: 2px solid #e8e8e8;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(-102%);
+  transition: transform var(--battle-drawer-ms, 400ms) cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.9);
+}
+#battle-drawer.open {
+  transform: translateY(0%);
+}
+#battle-drawer .drawer-header {
+  padding: 6px 14px;
+  background: #101018;
+  border-bottom: 1px dashed #444;
+  font-size: 13px;
+  color: #bbb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+#battle-log {
+  flex: 1;
+  padding: 12px 14px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+#battle-drawer .drawer-footer-handle {
+  height: 5px;
+  background: repeating-linear-gradient(90deg, #444 0px, #444 8px, transparent 8px, transparent 14px);
+}
+
+/* 雙行戰報小卡片（第 2 行直接顯示算式，無「└ 算式：」前綴） */
+.combat-report {
+  border-left: 3px solid #4da6ff;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 6px 10px;
+  margin-bottom: 10px;
+}
+.combat-report.enemy-atk {
+  border-left-color: #ff5c5c;
+}
+.combat-report .line-main {
+  font-weight: bold;
+  color: #fff;
+  margin-bottom: 2px;
+}
+.combat-report .line-formula {
+  font-size: 13.5px;
+  color: #9e9e9e;
+}
+
+/* ===== 歷史對話視窗（戰鬥標題使用粗體，不使用金色） ===== */
+#history-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.modal-box {
+  width: 100%;
+  max-width: 680px;
+  height: 80vh;
+  background: #050508;
+  border: 1px solid #e8e8e8;
+  display: flex;
+  flex-direction: column;
+}
+.modal-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid #444;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: bold;
+}
+.modal-body {
+  flex: 1;
+  padding: 12px 14px;
+  overflow-y: auto;
+  font-size: 14.5px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.modal-body p {
+  margin-bottom: 6px;
+}
+.history-battle-header {
+  margin: 12px 0 6px;
+  padding: 4px 8px;
+  background: #141418;
+  border-left: 3px solid #e8e8e8;
+  color: #fff;
+  font-weight: bold;
+}
+
+/* ===== 第 4 部分：按鈕選項區（維持上下堆疊模式 + 極簡單行文字） ===== */
+#choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#choices button {
+  background: #000;
+  color: #e8e8e8;
+  border: 1px solid #e8e8e8;
+  font-family: inherit;
+  font-size: 16px;
+  padding: 11px 14px;
+  text-align: left;
+  cursor: pointer;
+}
+/* 名字上色；只有真正有滑鼠的裝置（電腦）才觸發 hover 反白，避免手機觸控殘留白底黑字 */
+.name-boss { font-weight: bold; }
+@media (hover: hover) and (pointer: fine) {
+  #choices button:hover,
+  #choices button:focus-visible { background: #e8e8e8; color: #000; outline: none; }
+  #choices button:hover .name,
+  #choices button:focus-visible .name,
+  .menu button:hover .name,
+  .menu button:focus-visible .name { color: inherit !important; }
+}
+
+/* 手機與電腦按住按鈕瞬間（active）：深灰底色，保留怪物名字原本顏色 */
+#choices button:active,
+.menu button:active,
+#intro-screen .menu button:active { background: #262626; color: #e8e8e8; outline: none; }
+
+@media (max-width: 480px) {
+  body { font-size: 15px; }
+  #game { padding: 8px 10px; gap: 8px; }
+  #status, #enemy-panel { padding: 8px 10px; font-size: 14px; }
+  .bars-row { gap: 8px; }
+  .stats-quad-row { font-size: 13px; }
+  #choices button { padding: 10px 12px; font-size: 15px; }
+}
+
+/* ===== 標題畫面 / 遊戲介紹畫面 ===== */
+.screen {
+  width: 100%;
+  max-width: 760px;
+  height: 100vh;
+  height: 100dvh;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.hidden { display: none !important; }
+#title-screen { justify-content: center; align-items: center; text-align: center; }
+#title-screen .logo {
+  font-size: 40px; font-weight: bold; letter-spacing: 8px;
+  border: 1px solid #e8e8e8; padding: 18px 28px;
+}
+#title-screen .sub { color: #8a8a8a; }
+#title-screen .cursor { animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.menu { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 320px; margin-top: 12px; }
+.menu button, #intro-screen .menu button {
+  background: #000; color: #e8e8e8; border: 1px solid #e8e8e8;
+  font-family: inherit; font-size: 18px; padding: 14px; cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  .menu button:hover, .menu button:focus-visible { background: #e8e8e8; color: #000; outline: none; }
+}
+#intro-screen .box { flex: 1; overflow-y: auto; border: 1px solid #555; padding: 14px 16px; }
+#intro-screen h2 { font-size: 18px; margin: 4px 0 8px; letter-spacing: 2px; }
+#intro-screen h2:not(:first-child) { margin-top: 18px; }
+#intro-screen p, #intro-screen li { margin-bottom: 6px; }
+#intro-screen ul { padding-left: 1.4em; }
+#intro-screen .menu { flex-direction: row; max-width: none; margin-top: 0; }
+#intro-screen .menu button { flex: 1; }
+
+/* ===== 擲骰動畫 ===== */
+#dice {
+  position: fixed; inset: 0; z-index: 15; display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.6); opacity: 0; pointer-events: none; transition: opacity 120ms ease;
+}
+#dice.show { opacity: 1; pointer-events: all; }
+#dice .dice-box {
+  background: #000; border: 1px solid #e8e8e8; padding: 18px 28px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 240px; max-width: 90vw;
+}
+#dice .who { font-weight: bold; font-size: 18px; letter-spacing: 1px; }
+#dice .face {
+  width: 84px; height: 84px; border: 2px solid #e8e8e8; display: flex; align-items: center; justify-content: center;
+  font-size: 40px; font-weight: bold; color: #fff;
+}
+#dice .face.rolling { animation: shake 200ms linear infinite; }
+#dice .face.landed { animation: land 400ms ease-out; }
+#dice .note { color: #8a8a8a; font-size: 14px; }
+@keyframes shake {
+  0% { transform: rotate(-12deg) translate(-2px, 1px); }
+  50% { transform: rotate(10deg) translate(2px, -1px); }
+  100% { transform: rotate(-12deg) translate(-2px, 1px); }
+}
+@keyframes land { 0% { transform: scale(1.35); } 100% { transform: scale(1); } }
+
+/* ===== 勇者揮劍 ===== */
+#sword {
+  position: fixed; inset: 0; z-index: 16; pointer-events: none; display: none;
+  align-items: center; justify-content: center;
+}
+#sword.show { display: flex; }
+#sword .blade {
+  position: absolute; transform-origin: 50% 95%;
+  filter: drop-shadow(0 0 6px #ffffff);
+}
+#sword.show .blade { animation: swing var(--sword-ms, 650ms) cubic-bezier(.3,.0,.2,1) forwards; }
+#sword .slash {
+  position: absolute; width: 260px; height: 260px; border-radius: 50%;
+  border-top: 4px solid rgba(255,255,255,0.9); opacity: 0; transform: rotate(-40deg);
+}
+#sword.show .slash { animation: slash var(--sword-ms, 650ms) ease-out forwards; }
+@keyframes swing {
+  0% { transform: translateY(-40px) rotate(-75deg); opacity: 0; }
+  20% { opacity: 1; }
+  60% { transform: translateY(-40px) rotate(75deg); opacity: 1; }
+  100% { transform: translateY(-40px) rotate(80deg); opacity: 0; }
+}
+@keyframes slash {
+  0%, 30% { opacity: 0; transform: rotate(-60deg); }
+  55% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(40deg); }
+}
+
+/* ===== 受到攻擊：金光（無傷）／搖動＋紅光（受傷） ===== */
+#dialogue-stage.glow-gold, #log.glow-gold { animation: glowGold var(--hit-ms, 500ms) ease-out; }
+#dialogue-stage.glow-red, #log.glow-red { animation: glowRed var(--hit-ms, 500ms) ease-out; }
+@keyframes glowGold {
+  0% { box-shadow: 0 0 0 0 transparent; border-color: #555; }
+  35% { box-shadow: 0 0 18px 4px var(--gold, #ffd23f), inset 0 0 12px var(--gold, #ffd23f); border-color: var(--gold, #ffd23f); }
+  100% { box-shadow: 0 0 0 0 transparent; border-color: #555; }
+}
+@keyframes glowRed {
+  0% { box-shadow: 0 0 0 0 transparent; border-color: #555; }
+  35% { box-shadow: 0 0 18px 4px var(--red, #ff2b2b), inset 0 0 12px var(--red, #ff2b2b); border-color: var(--red, #ff2b2b); }
+  100% { box-shadow: 0 0 0 0 transparent; border-color: #555; }
+}
+#game.shake { animation: shakeScreen var(--hit-ms, 500ms) linear; }
+@keyframes shakeScreen {
+  0%, 100% { transform: translate(0, 0); }
+  10% { transform: translate(-8px, 3px); }
+  20% { transform: translate(7px, -4px); }
+  30% { transform: translate(-6px, 4px); }
+  40% { transform: translate(6px, -2px); }
+  50% { transform: translate(-4px, 3px); }
+  60% { transform: translate(4px, -2px); }
+  70% { transform: translate(-3px, 1px); }
+  80% { transform: translate(2px, -1px); }
+  90% { transform: translate(-1px, 0); }
+}
+
+/* ===== 魔王出現動畫 ===== */
+#boss-appear {
+  position: fixed; inset: 0; z-index: 17; pointer-events: none; display: none;
+  align-items: center; justify-content: center; background: rgba(0,0,0,0.5);
+}
+#boss-appear.show { display: flex; }
+#boss-appear img {
+  width: min(60vw, 300px); height: auto;
+  filter: drop-shadow(0 0 18px rgba(255,0,0,0.7));
+}
+#boss-appear.show img { animation: bossAppear var(--boss-ms, 1800ms) ease-out forwards; }
+@keyframes bossAppear {
+  0% { transform: scale(var(--boss-from, 0.2)); opacity: 1; }
+  100% { transform: scale(var(--boss-to, 1.8)); opacity: 0; }
+}
+
+/* ===== 劇情文字動畫 ===== */
+#story {
+  position: fixed; inset: 0; z-index: 18; display: none;
+  align-items: center; justify-content: center;
+  background: rgba(0,0,0,0); pointer-events: all;
+}
+#story.show { display: flex; }
+#story .text {
+  font-size: 26px; font-weight: bold; letter-spacing: 3px; line-height: 1.6; max-width: 700px; color: #fff;
+  text-align: center; padding: 0 16px; opacity: 0;
+  text-shadow: 0 0 12px rgba(255,255,255,0.35);
+}
+@media (max-width: 480px) { #story .text { font-size: 20px; letter-spacing: 2px; } }
+
+/* ===== 轉場動畫：畫面淡出 → 掃描線掃過 → 新畫面淡入 ===== */
+#fade {
+  position: fixed; inset: 0; background: #000; pointer-events: none;
+  opacity: 0; transition: opacity var(--fade-ms, 300ms) ease;
+  z-index: 20;
+}
+#fade.on { opacity: 1; pointer-events: all; }
+#fade .scan {
+  position: absolute; left: 0; right: 0; height: 2px; top: -4px;
+  background: #e8e8e8; box-shadow: 0 0 12px #e8e8e8; opacity: 0;
+}
+#fade.on .scan { animation: scan var(--scan-ms, 400ms) linear forwards; }
+@keyframes scan { 0% { top: 0; opacity: 1; } 100% { top: 100%; opacity: 0.2; } }
+.enter { animation: enter var(--fade-ms, 300ms) ease-out; }
+@keyframes enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  #fade.on .scan, .enter, #title-screen .cursor, #dice .face, #sword .blade, #sword .slash, #game.shake, #boss-appear img { animation: none !important; }
+}
+
+@media (max-width: 480px) {
+  #title-screen .logo { font-size: 30px; letter-spacing: 5px; padding: 14px 18px; }
+  .screen { padding: 10px; }
+}
+
+/* ===== 模式選擇提示（按下開始遊戲後顯示） ===== */
+.mode-prompt {
+  color: #fff;
+  font-weight: bold;
+  font-size: 16px;
+  letter-spacing: 2px;
+  margin-bottom: 2px;
+}
+
+/* ===== 撲克模式：洗牌與抽一張撲克牌動畫（暗黑終端機黑底白框配色） ===== */
+#poker-draw {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.72);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+#poker-draw.show {
+  opacity: 1;
+  pointer-events: all;
+}
+#poker-draw .poker-box {
+  background: #000;
+  border: 1px solid #e8e8e8;
+  padding: 18px 26px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  min-width: 280px;
+  max-width: 92vw;
+  box-shadow: 0 0 28px rgba(0, 0, 0, 0.9);
+}
+#poker-draw .who {
+  font-weight: bold;
+  font-size: 18px;
+  letter-spacing: 1px;
+}
+#poker-draw .stage-label {
+  font-size: 13px;
+  color: #aaa;
+  min-height: 20px;
+  letter-spacing: 1px;
+}
+#poker-draw .card-stage {
+  position: relative;
+  width: 170px;
+  height: 190px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 900px;
+}
+#poker-draw .deck-stack {
+  position: absolute;
+  width: 118px;
+  height: 168px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+#poker-draw .deck-stack.recede {
+  opacity: 0.22;
+  transform: translateY(16px) scale(0.86);
+}
+#poker-draw .deck-card {
+  position: absolute;
+  width: 118px;
+  height: 168px;
+}
+#poker-draw .deck-card:nth-child(1) { transform: translate(-4px, -3px) rotate(-3deg); }
+#poker-draw .deck-card:nth-child(2) { transform: translate(2px, -1px) rotate(2deg); }
+#poker-draw .deck-card:nth-child(3) { transform: translate(-2px, 2px) rotate(-1deg); }
+#poker-draw .deck-card:nth-child(4) { transform: translate(3px, 3px) rotate(3deg); }
+
+#poker-draw .deck-stack.shuffling .deck-card:nth-child(1) {
+  animation: pokerShuffleLeft 250ms ease-in-out infinite alternate;
+}
+#poker-draw .deck-stack.shuffling .deck-card:nth-child(2) {
+  animation: pokerShuffleRight 250ms ease-in-out infinite alternate;
+}
+#poker-draw .deck-stack.shuffling .deck-card:nth-child(3) {
+  animation: pokerShuffleLeftDeep 250ms ease-in-out 60ms infinite alternate;
+}
+#poker-draw .deck-stack.shuffling .deck-card:nth-child(4) {
+  animation: pokerShuffleRightDeep 250ms ease-in-out 60ms infinite alternate;
+}
+
+@keyframes pokerShuffleLeft {
+  0% { transform: translate(0, 0) rotate(0deg); z-index: 1; }
+  50% { transform: translate(-40px, -7px) rotate(-12deg); z-index: 4; }
+  100% { transform: translate(4px, 2px) rotate(3deg); z-index: 3; }
+}
+@keyframes pokerShuffleRight {
+  0% { transform: translate(0, 0) rotate(0deg); z-index: 2; }
+  50% { transform: translate(40px, 6px) rotate(12deg); z-index: 1; }
+  100% { transform: translate(-4px, -2px) rotate(-3deg); z-index: 4; }
+}
+@keyframes pokerShuffleLeftDeep {
+  0% { transform: translate(-2px, 2px) rotate(-2deg); }
+  50% { transform: translate(-24px, 9px) rotate(-7deg); }
+  100% { transform: translate(5px, -3px) rotate(4deg); }
+}
+@keyframes pokerShuffleRightDeep {
+  0% { transform: translate(2px, -2px) rotate(2deg); }
+  50% { transform: translate(24px, -9px) rotate(7deg); }
+  100% { transform: translate(-5px, 3px) rotate(-4deg); }
+}
+
+#poker-draw .drawn-card-wrapper {
+  position: relative;
+  width: 118px;
+  height: 168px;
+  z-index: 10;
+  opacity: 0;
+  transform: translateY(12px) scale(0.9);
+  transform-style: preserve-3d;
+}
+#poker-draw .drawn-card-wrapper.drawing {
+  opacity: 1;
+  animation: pokerDrawAndFlip var(--poker-draw-ms, 620ms) cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+#poker-draw .drawn-card-wrapper.landed {
+  opacity: 1;
+  transform: translateY(0) scale(1.05) rotateY(0deg);
+  animation: pokerLandPop 340ms ease-out forwards;
+}
+
+@keyframes pokerDrawAndFlip {
+  0% { opacity: 1; transform: translateY(10px) scale(0.92) rotateY(180deg); }
+  45% { opacity: 1; transform: translateY(-20px) scale(1.08) rotateY(90deg); }
+  100% { opacity: 1; transform: translateY(0px) scale(1.04) rotateY(0deg); }
+}
+@keyframes pokerLandPop {
+  0% { transform: scale(1.12); }
+  60% { transform: scale(0.98); }
+  100% { transform: scale(1.04); }
+}
+
+#poker-draw .drawn-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+#poker-draw .drawn-face.back {
+  transform: rotateY(180deg);
+}
+
+/* 暗黑終端機撲克牌面（黑底白框）與牌背樣式 */
+.poker-card {
+  position: relative;
+  width: 118px;
+  height: 168px;
+  background: #0b0b0e;
+  border: 2px solid #e8e8e8;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.75), inset 0 0 0 1px #888888;
+  border-radius: 8px;
+  user-select: none;
+  font-family: "Georgia", "Times New Roman", serif;
+  overflow: hidden;
+}
+.poker-card.is-red { color: #ff3b3b; }
+.poker-card.is-black { color: #f0f0f0; }
+
+.poker-card .card-corner {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+  width: 22px;
+  z-index: 2;
+}
+.poker-card .card-corner.top-left { top: 6px; left: 5px; }
+.poker-card .card-corner.bottom-right { bottom: 6px; right: 5px; transform: rotate(180deg); }
+.poker-card .corner-rank {
+  font-size: 16px;
+  font-weight: bold;
+  letter-spacing: -0.5px;
+  font-family: "Arial", "Helvetica", sans-serif;
+}
+.poker-card .corner-suit { font-size: 14px; margin-top: 1px; }
+
+.poker-card .card-center {
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 24px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.poker-card .pip-ace { font-size: 54px; line-height: 1; }
+.poker-card .pip-grid { position: relative; width: 100%; height: 100%; }
+.poker-card .pip {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: 22px;
+  line-height: 1;
+}
+.poker-card .pip.inv { transform: translate(-50%, -50%) rotate(180deg); }
+.poker-card .pip-grid.dense .pip { font-size: 19px; }
+
+.poker-card .court-box {
+  width: 100%;
+  height: 100%;
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.poker-card .court-box svg { width: 52px; height: 76px; overflow: visible; }
+.poker-card .court-watermark {
+  position: absolute;
+  font-size: 11px;
+  font-family: "Courier New", monospace;
+  font-weight: bold;
+  opacity: 0.8;
+  bottom: 3px;
+  letter-spacing: 0.5px;
+}
+.poker-card .court-suit-tl { position: absolute; top: 3px; left: 4px; font-size: 12px; line-height: 1; }
+.poker-card .court-suit-br { position: absolute; bottom: 3px; right: 4px; font-size: 12px; line-height: 1; transform: rotate(180deg); }
+
+.poker-card-back {
+  width: 118px;
+  height: 168px;
+  background: #0d0d12;
+  border: 2px solid #e8e8e8;
+  border-radius: 8px;
+  padding: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.75);
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+}
+.poker-card-back .card-back-inner {
+  width: 100%;
+  height: 100%;
+  border: 1.5px solid #888;
+  border-radius: 4px;
+  background-color: #12121a;
+  background-image:
+    repeating-linear-gradient(45deg, rgba(232,232,232,0.08) 0px, rgba(232,232,232,0.08) 2px, transparent 2px, transparent 8px),
+    repeating-linear-gradient(-45deg, rgba(232,232,232,0.08) 0px, rgba(232,232,232,0.08) 2px, transparent 2px, transparent 8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #e8e8e8;
+}
+.poker-card-back .card-back-emblem {
+  width: 42px;
+  height: 42px;
+  border: 1.5px solid #aaa;
+  transform: rotate(45deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #09090d;
+}
+.poker-card-back .card-back-emblem span {
+  transform: rotate(-45deg);
+  font-family: "Courier New", monospace;
+  font-size: 13px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  color: #fff;
+}
+
+#poker-draw .value-badge {
+  font-size: 15px;
+  font-weight: bold;
+  color: #ffd23f;
+  min-height: 22px;
+}
+#poker-draw .note {
+  color: #8a8a8a;
+  font-size: 14px;
+  min-height: 20px;
+}
+
+/* ===== 第七版新增：左上角「測試者」按鈕與樓層選擇視窗 ===== */
+.panel-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.tester-btn {
+  background: transparent;
+  color: transparent;
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: bold;
+  padding: 2px 8px;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  opacity: 0;
+  user-select: none;
+  outline: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .tester-btn:hover,
+  .tester-btn:focus-visible {
+    background: transparent;
+    color: transparent;
+    border-color: transparent;
+    opacity: 0;
+    outline: none;
+  }
+}
+.tester-btn:active,
+.tester-btn:focus {
+  background: transparent;
+  color: transparent;
+  border-color: transparent;
+  opacity: 0;
+  outline: none;
+}
+#tester-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 28;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.tester-modal-box {
+  width: 100%;
+  max-width: 480px;
+  background: #050508;
+  border: 1px solid #ffd23f;
+  box-shadow: 0 0 18px rgba(255, 210, 63, 0.3);
+  display: flex;
+  flex-direction: column;
+}
+.tester-modal-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid #444;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: bold;
+  color: #ffd23f;
+}
+.tester-modal-body {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 14.5px;
+}
+.tester-floor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.tester-floor-list button {
+  background: #000;
+  color: #e8e8e8;
+  border: 1px solid #e8e8e8;
+  font-family: inherit;
+  font-size: 15px;
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  .tester-floor-list button:hover {
+    background: #e8e8e8;
+    color: #000;
+  }
+}
+.tester-floor-list button:active {
+  background: #262626;
+  color: #e8e8e8;
+}
+
+  </style>
+</head>
+<body>
+<!-- 標題畫面 -->
+<div id="title-screen" class="screen">
+  <div class="logo" id="title-logo"></div>
+  <div class="sub" id="title-sub"></div>
+  <div class="sub"><span class="cursor">▌</span></div>
+  <div class="menu" id="title-main-menu">
+    <button id="btn-start">開始遊戲</button>
+    <button id="btn-intro">遊戲介紹</button>
+  </div>
+  <div class="menu hidden" id="title-mode-menu">
+    <div class="mode-prompt" id="mode-prompt-title">請選擇本局遊戲模式：</div>
+    <button id="btn-mode-dice">骰子模式</button>
+    <button id="btn-mode-poker">撲克模式</button>
+    <button id="btn-mode-back">返回</button>
+  </div>
+</div>
+
+<!-- 遊戲介紹畫面 -->
+<div id="intro-screen" class="screen hidden">
+  <div class="box" id="intro-box"></div>
+  <div class="menu">
+    <button id="btn-back">返回</button>
+    <button id="btn-intro-start">開始遊戲</button>
+  </div>
+</div>
+
+<!-- 擲骰動畫（骰子模式） -->
+<div id="dice" aria-live="polite">
+  <div class="dice-box">
+    <div class="who"></div>
+    <div class="face">0</div>
+    <div class="note"></div>
+  </div>
+</div>
+
+<!-- 抽撲克牌動畫（撲克模式：先洗牌後抽一張牌翻開） -->
+<div id="poker-draw" aria-live="polite">
+  <div class="poker-box">
+    <div class="who"></div>
+    <div class="stage-label"></div>
+    <div class="card-stage">
+      <div class="deck-stack">
+        <div class="deck-card"></div>
+        <div class="deck-card"></div>
+        <div class="deck-card"></div>
+        <div class="deck-card"></div>
+      </div>
+      <div class="drawn-card-wrapper">
+        <div class="drawn-face front"></div>
+        <div class="drawn-face back"></div>
+      </div>
+    </div>
+    <div class="value-badge"></div>
+    <div class="note"></div>
+  </div>
+</div>
+
+<!-- 勇者揮劍動畫 -->
+<div id="sword" aria-hidden="true">
+  <div class="slash"></div>
+  <svg class="blade" viewBox="0 0 40 200" width="40" height="200">
+    <polygon points="20,0 28,18 28,140 12,140 12,18" fill="#e8e8e8" stroke="#ffffff" stroke-width="1"/>
+    <line x1="20" y1="12" x2="20" y2="136" stroke="#9a9a9a" stroke-width="2"/>
+    <rect x="0" y="140" width="40" height="8" fill="#4da6ff"/>
+    <rect x="15" y="148" width="10" height="38" fill="#8a6a3a"/>
+    <circle cx="20" cy="192" r="7" fill="#4da6ff"/>
+  </svg>
+</div>
+
+<!-- 魔王出現動畫（頭像圖片直接嵌在檔案裡，保持單一 index.html） -->
+<div id="boss-appear" aria-hidden="true">
+  <img alt="" src="data:image/webp;base64,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">
+</div>
+
+<!-- 劇情文字動畫 -->
+<div id="story" aria-live="polite"><div class="text"></div></div>
+
+<!-- 轉場用的黑幕 -->
+<div id="fade"><div class="scan"></div></div>
+
+<div id="game" class="hidden">
+  <div id="status"></div>
+  <div id="enemy-panel" class="hidden"></div>
+  <div id="dialogue-stage">
+    <div id="log" aria-live="polite"></div>
+    <div id="battle-intro-overlay" aria-hidden="true">
+      <div class="intro-text" id="battle-intro-text">戰鬥開始了！！！</div>
+    </div>
+    <div id="battle-drawer" aria-live="polite">
+      <div class="drawer-header">
+        <span id="battle-drawer-title"></span>
+      </div>
+      <div id="battle-log"></div>
+      <div class="drawer-footer-handle"></div>
+    </div>
+  </div>
+  <div id="choices"></div>
+</div>
+
+<!-- 歷史對話視窗 -->
+<div id="history-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="history-modal-title">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span id="history-modal-title">歷史對話紀錄</span>
+      <button type="button" id="btn-close-history" class="mini-btn">✕ 關閉</button>
+    </div>
+    <div class="modal-body" id="history-content"></div>
+  </div>
+</div>
+
+<!-- 測試者模式視窗（第七版新增：裝備 999 無敵套裝並自由選擇前往樓層） -->
+<div id="tester-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="tester-modal-title">
+  <div class="tester-modal-box">
+    <div class="tester-modal-header">
+      <span id="tester-modal-title">🛠 測試者模式（已穿戴 999 無敵套裝）</span>
+      <button type="button" id="btn-close-tester" class="mini-btn">✕ 關閉</button>
+    </div>
+    <div class="tester-modal-body">
+      <p>已為勇者自動裝備<strong>無敵套裝（物理武器 999、魔法武器 999、物理防禦 999、魔法防禦 999）</strong>並補滿生命！請選擇你要傳送測試的樓層：</p>
+      <div class="tester-floor-list" id="tester-floor-list"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   遊戲設定（集中管理常數、初始數值、顏色與動畫時間 — 第七版 v7）
+   樓層、怪物與裝備詳細資料請見 data.js
+   ========================================================= */
+
+// 名字顏色：勇者藍色；物理怪黃色、魔法怪紅色、渾沌怪橙色（1層最淺→5層最深）；魔王深橙色粗體；二階段半血前紫紅色粗體、半血後鮮紅粗體
+const HERO_COLOR = "#4da6ff";
+const ENEMY_COLORS = {
+  // 物理怪（黃色系：1 層最淺 → 5 層最深）
+  "墨染史萊姆": "#fff9a6",   // 第 1 層
+  "蝕刻穴居人": "#fff066",   // 第 2 層
+  "亂碼骸骨死士": "#ffe033", // 第 3 層
+  "淵面行刑者": "#ffcc00",   // 第 4 層
+  "原典禁衛巨兵": "#d4a000", // 第 5 層
+  // 魔法怪（紅色系：1 層最淺 → 5 層最深）
+  "漂浮符文妖": "#ff9999",   // 第 1 層
+  "洞窟秘術咒靈": "#ff6666", // 第 2 層
+  "哀號字節幽魂": "#ff3333", // 第 3 層
+  "斷章星象術士": "#cc1111", // 第 4 層
+  "王座吟唱主教": "#990000", // 第 5 層
+  // 渾沌怪（橙色系：1 層最淺 → 5 層最深）
+  "墨痕聚合體": "#ffcc99",   // 第 1 層
+  "裂隙蝕骨獸": "#ffad66",   // 第 2 層
+  "亂碼編譯魔像": "#ff8c33", // 第 3 層
+  "虛空斷章巨靈": "#f06b00", // 第 4 層
+  "文字同化核心": "#c85000", // 第 5 層
+  // 一階段魔王（擊敗前隱藏前勇者身分）
+  "文字魔王": "#9a3400",
+  "前勇者": "#7ec8ff",
+  // 二階段魔王（半血前只顯示亂碼，半血後顯露真名）
+  "@$+%^&¥": "#e040fb",
+  "文字.沙坦": "#ff1744",
+  "真魔王": "#e040fb",
+};
+
+// 勇者初始數值（生命 20、物攻 8、魔攻 8、物防 8、魔防 8、護盾 0）
+const HERO_BASE = {
+  hp: 20,
+  physAtk: 8,
+  magAtk: 8,
+  physDef: 8,
+  magDef: 8,
+  shield: 0,
+};
+
+// 爬塔、營地回血與跨層成長設定（第七版 方案 B 標準平衡版）
+const MAX_FLOOR = 5;                // 總層數（1–5 層）
+const ROUNDS_PER_FLOOR = 6;         // 每層固定 6 回合（第 1–5 回合遭遇抉擇，第 6 回合傳送門+寶箱／魔王戰）
+const FLOOR_HP_BONUS = 12;          // 每過一層勇者最大生命 +12，並回復 12 點生命（第 5 層最大生命 68）
+const CAMP_HEAL_RATIO = 0.60;       // 營地生火休息：回復最大生命的 60%
+const SKILL_CAMP_HEAL_RATIO = 0.45; // 殘頁篝火調息（暫代技能）：回復最大生命的 45%
+
+// 【骰子模式】與【撲克模式】特殊戰鬥規則常數（方案 B：穿盾僅對「骰出 20」與「抽到 A 或 K」觸發）
+const DICE_CRIT_DEF_MULT = 0.5;     // 骰子模式：骰出 20 時無視對方 50% 防禦（向下取整）且直接無視護盾
+const DICE_PIERCE_SHIELD_MIN = 20;  // 骰子模式：骰出 20 時直接無視護盾扣減生命
+const POKER_ACE_DEF_MULT = 0.5;     // 撲克模式：抽到 A（點數 1）時無視對方 50% 防禦（向下取整）且無視護盾
+const POKER_KING_PIERCE_VAL = 13;   // 撲克模式：抽到 K（點數 13）或 A（點數 1）時直接無視護盾扣減生命
+const POKER_SUIT_ATK_BONUS = 3;     // 撲克模式：黑色花色(♠♣)物理攻擊臨時 +3；紅色花色(♥♦)魔法攻擊臨時 +3
+
+// 一階段魔王設定（方案 B：HP 120、基礎雙攻+2／雙防+2，擊敗前完全不顯示前勇者字眼，破綻減防 30%，掙扎改為自傷揮空 vs. 暴走）
+const BOSS_WEAKNESS_MULT = 0.7;           // 一階段魔王每回合排斥破綻：隨機物防或魔防 ×0.7（減免 30%）
+const BOSS_STRUGGLE_CHANCE_BASE = 0.15;   // 開戰初期（HP > 50%）每回合掙扎機率 15%
+const BOSS_STRUGGLE_CHANCE_LOW_HP = 0.30; // 半血以下（HP <= 50%）每回合掙扎機率 30%
+const BOSS_STRUGGLE_HP_RATIO = 0.5;       // 劇烈掙扎觸發生命比例門檻（50%）
+const BOSS_STRUGGLE_SELF_DMG = 10;        // 掙扎結果 A（50%）：揮空並且傷到自己 10 點生命
+const BOSS_STRUGGLE_BERSERK_ATK = 6;      // 掙扎結果 B（50%）：魔王暴走，本回合攻擊力臨時 +6 並發動攻擊
+const BOSS_STRUGGLE_TEXT = "魔王突然劇烈掙扎";
+const BOSS_STRUGGLE_SELF_HIT_TEXT = "魔王揮空並且傷到了自己";
+const BOSS_STRUGGLE_BERSERK_TEXT = "魔王暴走！！！";
+
+// 【勇者之劍】設定（方案 B：回復 80% 最大生命、初始攻擊 ×1.45、擋死 2 次且每次衰減 0.15 並重鑄滿額護盾）
+const HERO_SWORD_HEAL_RATIO = 0.80;       // 取得【勇者之劍】時回復 80% 最大生命
+const HERO_SWORD_ATK_MULT = 1.45;         // 【勇者之劍】初始破魔增傷倍率（未計算前攻擊力 × 1.45）
+const HERO_SWORD_MAX_BLOCKS = 2;          // 【勇者之劍】殘魂免疫致命傷次數上限（最多 2 次，鎖 1 血並重鑄護盾）
+const HERO_SWORD_BLOCK_DECAY = 0.15;      // 每觸發 1 次殘魂擋死，攻擊倍率下降 0.15（1.45 ➔ 1.30 ➔ 1.15）
+
+// 二階段心魔戰設定（方案 B：HP 135、1:1 複製無額外本源攻防；半血前嚴格只顯示亂碼 @$+%^&¥，不寫真魔王或沙坦）
+const PHASE2_BOSS_HP = 135;                     // 二階段生命值 135
+const PHASE2_BOSS_HIDDEN_NAME = "@$+%^&¥";      // 二階段半血前顯示之亂碼名稱
+const PHASE2_BOSS_TRUE_NAME = "文字.沙坦";       // 二階段半血後顯露之真名
+const PHASE2_BOSS_BONUS_ATK = 0;                // 方案 B：維持 1:1 鏡像複製（本源額外雙攻加成 0）
+const PHASE2_BOSS_BONUS_DEF = 0;                // 方案 B：維持 1:1 鏡像複製（本源額外雙防加成 0）
+const PHASE2_BOSS_INIT_MULT = 1.05;             // 前半血【亂碼侵蝕】狀態：未計算前攻擊力 × 1.05
+const PHASE2_BOSS_LIFESTEAL = 2;                // 前半血【亂碼侵蝕】狀態：每次造成生命傷害吸取 2 點生命
+const PHASE2_BOSS_RAGE_HP_RATIO = 0.5;          // 半血露名與狂暴觸發門檻（50%，即 HP <= 67）
+const PHASE2_BOSS_RAGE_MULT = 1.35;             // 後半血【真名狂暴】狀態：未計算前攻擊力 × 1.35
+const PHASE2_BOSS_RAGE_SHIELD = 10;             // 後半血顯露真名當下立即重鑄 10 點原典黑盾
+
+// 測試者無敵套裝設定（第七版新增：點擊左上角「測試者」按鈕獲得，全數值 999）
+const TESTER_STAT_VAL = 999;
+
+// 一階段擊敗後與二階段劇情演出文字（擊敗一階段後勇者才發現前勇者身分；半血前僅以 @$+%^&¥ 稱呼，不寫真魔王或沙坦）
+const PHASE1_CLEAR_TEXTS = [
+  "前勇者：「你就是後來者嗎？很高興你成功走到這裏。那麼這勇者之劍也給你吧，你比我更需要它。終於解脫了....不要步我的後塵，小心@$+%^&¥…」",
+  "勇者接過了【勇者之劍】，生命獲得大幅恢復！然而卻驚恐地發現身上的文字裝備已無法脫下……",
+  "勇者：「！！！他是前勇者？怪不得它的力量如此怪異，但最後的亂碼是甚麼」",
+  "勇者嘗試回憶，卻頭痛欲裂：「啊啊啊啊啊」",
+  "@$+%^&¥：「前勇者這混蛋，差點讓他透露了我的名字呢。不過這個祕密也快要永遠埋藏在這裏了。（一陣奸笑）」",
+  "勇者感覺有些甚麼從自己腦海中分離了出去，失去意識……墜入了精神世界！",
+];
+
+// 完全徒手通關隱藏彩蛋台詞（擊敗一階段後揭曉前勇者，並以 @$+%^&¥ 顯示幕後黑手）
+const UNARMED_EGG_TEXTS = [
+  "前勇者：「你就是後來者嗎？很高興你成功走到這裏……等等，你身上竟然完全沒有文字裝備的痕跡？！」",
+  "@$+%^&¥：「這不可能！竟然完全沒有借助我的力量就做到這種程度！」",
+  "隨着@$+%^&¥不甘的怒吼消散在空氣中，束縛大地的文字詛咒徹底瓦解，萬物恢復了血肉與生機！",
+];
+
+// 【勇者之劍】殘魂擋死畫面中心文字（文字消失效果）
+const HERO_SWORD_BLOCK_TEXT = "（前勇者的殘魂爲你擋下了這一擊....）";
+const HERO_SWORD_VANISH_TEXT = "（前勇者的殘魂已經消逝....）";
+
+// 二階段勝利結局台詞（全部用文字消失效果呈現）
+const PHASE2_VICTORY_TEXTS = [
+  "文字.沙坦 ：「 不可能....這不可能....不要啊啊啊！」",
+  "隨着沙坦的意識徹底瓦解，勇者身上的文字逐漸消失，取而代之的是原本的身體。",
+  "勇者：「終於....結束了。」",
+  "溫暖的血液重新在血管中流淌，花草樹木與村民也恢復了原本的模樣。你奪回了血肉之身，成功拯救了村落！",
+];
+
+// 二階段敗北結局台詞（全部用文字消失效果呈現）
+const PHASE2_DEFEAT_TEXTS = [
+  "你的意識在黑暗中被徹底吞噬，最後一絲血肉也化作了冰冷的文字……",
+  "你緩緩坐上原典王座，成為了新一代「文字魔王」，靜靜等待着下一位挑戰者的到來……",
+];
+
+// 每層幕後事件池（第 1–5 回合，對玩家完全隱藏牌庫資訊）：
+// 4 個固定事件：2 個打鬥 (monster)、1 個回復 (camp)、1 個暫代技能 (skill_camp)
+// 第 5 個隨機事件：從 ["monster", "camp", "skill_camp"] 中隨機抽 1 個
+const FIXED_FLOOR_CARDS = ["monster", "monster", "camp", "skill_camp"];
+const RANDOM_FIFTH_POOL = ["monster", "camp", "skill_camp"];
+
+// 裝備部位名稱（5 格常駐裝備欄：物理武器、魔法武器、雙防裝甲、護盾、飾品）
+const SLOT_NAME = {
+  physWeapon: "物理武器",
+  magWeapon: "魔法武器",
+  armor: "裝甲",
+  shield: "盾牌",
+  accessory: "飾品",
+};
+
+// 標題畫面文字
+const TITLE_TEXT = "勇者與魔王";
+const TITLE_SUB = "一款純文字冒險 RPG";
+
+// 遊戲介紹文字（第七版同步方案 B 規則與保密劇情規範）
+const INTRO_STORY = [
+  "平靜祥和的村落降臨了「文字魔王」，花草樹木、房屋乃至人民，都被魔王化為了一個個冰冷的文字。",
+  "為了拯救村落，身為勇者的你毅然踏入被文字侵蝕的領域，向第五層的「原典王座」前進。",
+  "然而，當你拾起怪物掉落的強力文字裝備時，你自己的血肉之軀也正逐漸被文字同化……",
+];
+
+const INTRO_RULES = [
+  `全遊戲分為 1～${MAX_FLOOR} 層爬塔，每層固定 ${ROUNDS_PER_FLOOR} 回合。`,
+  "每層第 1～4 回合前方會出現兩條分岔道路供你二選一（可能遭遇怪物迎戰，或在營地回復 60% 最大生命、在殘頁篝火旁回復 45% 最大生命）；第 5 回合則會踏上該層最後一段路途。",
+  `第 1～4 層的第 6 回合固定為【傳送門 + 寶箱】，可從 4 件跨層保底裝備中隨機抽取 1 件，並在進入下一層時最大生命 +${FLOOR_HP_BONUS} 且回復 ${FLOOR_HP_BONUS} 點生命；第 5 層第 6 回合直接迎戰文字魔王。`,
+  "勇者擁有 5 個常駐裝備欄：物理武器（加物攻）、魔法武器（加魔攻）、裝甲（同時加物防與魔防）、盾牌（加護盾）、飾品（特殊加成），可點擊頂部面板的「裝備 ▼」隨時展開查看。打倒怪物或開寶箱獲得裝備時可選擇拾取替換或放棄，換裝時身體會逐漸文字化。",
+  "可從怪物名字與面板外框微光顏色分辨特性（顏色隨 1～5 層由淺變深）：黃色擅長物理（物攻、高物防低魔防，弱點為魔法）、紅色擅長魔法（魔攻、高魔防低物防，弱點為物理）、橙色物魔雙修（隨機出招，每回合隨機出現物防或魔防減半的排斥破綻），文字魔王則為深橙色。",
+  "按下「開始遊戲」後可自由選擇【骰子模式（0–20）】或【撲克模式（抽取 52 張標準撲克牌，A=1、2～10、J=11、Q=12、K=13，不含鬼牌）】。",
+  "【骰子模式規則】：骰出 0 強制失手（0 傷害）；骰出 20 觸發大成功（無視對方 50% 防禦並直接無視護盾扣減生命）！",
+  "【撲克模式規則】：抽到黑色花色（♠黑桃／♣梅花）時物理攻擊力臨時 +3，抽到紅色花色（♥紅心／♦方塊）時魔法攻擊力臨時 +3；抽到 K（13）直接無視護盾扣減生命；抽到 A（1）觸發王牌穿刺，無視對方 50% 防禦並直接無視護盾！",
+  "進入戰鬥時會拉下專屬的戰鬥對話框並進行先攻判定（單數勇者先攻，雙數對手先攻）。受傷預設先扣護盾再扣生命，護盾每場戰鬥刷新，生命不會自動刷新。",
+  "終局迎戰文字魔王時，魔王偶爾會出現劇烈掙扎而揮空自傷或突然暴走；揭開王座背後的真相後，將迎來最終的決戰。",
+];
+
+// 遊戲模式選擇文案
+const MODE_PROMPT_TEXT = "請選擇本局遊戲模式：";
+const MODE_DICE_BTN_TEXT = "骰子模式";
+const MODE_POKER_BTN_TEXT = "撲克模式";
+
+// 戰鬥對話框拉簾與開戰提示動畫設定
+const BATTLE_INTRO_TEXT = "戰鬥開始了！！！";
+const BATTLE_INTRO_MS = 1100;  // 「戰鬥開始了！！！」浮現並漸隱時間
+const BATTLE_DRAWER_MS = 400;  // 戰鬥對話框從頂部拉下／從底部收回時間
+
+// 擲骰動畫時間（毫秒，骰子模式使用）
+const DICE_ROLL_MS = 1400; // 數字亂跳多久
+const DICE_TICK_MS = 100;  // 每隔多久換一次數字
+const DICE_HOLD_MS = 1000; // 停在結果上多久
+
+// 抽撲克牌動畫時間（毫秒，撲克模式使用：洗牌 + 抽牌翻開共 1.5 秒）
+const POKER_SHUFFLE_MS = 880; // 階段 1：洗牌交錯時間（0.88 秒）
+const POKER_DRAW_MS = 620;    // 階段 2：抽牌並 3D 翻開時間（0.62 秒，合計 1.5 秒）
+const POKER_HOLD_MS = 1000;   // 階段 3：翻開定格展示時間（1.0 秒）
+
+// 戰鬥效果動畫時間（毫秒）
+const SWORD_MS = 650;         // 勇者揮劍
+const HIT_MS = 500;           // 受到攻擊：金光（無傷）／搖動＋紅光（受傷）
+const GOLD_GLOW = "#ffd23f";  // 無傷金光顏色
+const RED_GLOW = "#ff2b2b";   // 受傷紅光顏色
+
+// 魔王出現動畫：頭像由小放大、越來越透明
+const BOSS_APPEAR_MS = 1800;  // 動畫長度
+const BOSS_SCALE_FROM = 0.2;  // 開始大小（倍數）
+const BOSS_SCALE_TO = 1.8;    // 結束大小（倍數）
+
+// 劇情文字動畫：文字出現後漸漸透明並消失
+const START_TEXT = "冒險開始了.....";  // 按下開始遊戲後
+const DEFEAT_TEXT = "勇者敗了......";  // 勇者被打敗後
+const STORY_SHOW_MS = 300;             // 文字浮現
+const STORY_HOLD_MS = 900;             // 文字完全清楚的時間
+const STORY_FADE_MS = 1600;            // 文字漸漸透明到消失
+const DEFEAT_WAIT_MS = 1200;           // 被打敗後先停一下，讓玩家看清最後一擊
+const DEFEAT_DARKEN_MS = 1200;         // 畫面變暗所需時間
+const DEFEAT_DARKNESS = 0.85;          // 變暗程度（0＝不變暗，1＝全黑）
+
+// 轉場動畫時間（毫秒）
+const FADE_MS = 300; // 淡出 / 淡入
+const SCAN_MS = 400; // 掃描線掃過
+
+/* =========================================================
+   樓層、三系怪物、裝備、跨層寶箱與測試者無敵套裝資料庫 (data.js — 第七版 v7)
+   資料來源：《勇者與魔王_全樓層怪物與裝備數值表.xlsx》與第七版方案 B 定案規格
+   註：怪物強化的攻防直接加於怪物自身的 baseStats 上，不改動掉落裝備數值
+   ========================================================= */
+
+// 1–5 層樓層基本資訊
+const FLOORS = [
+  { floor: 1, name: "殘墨林徑", desc: "林間的草木皆已化為扭曲的黑墨字元，微風中傳來紙頁摩擦的沙沙聲。" },
+  { floor: 2, name: "蝕骨石窟", desc: "陰暗的石窟內壁刻滿了尖銳的部首與筆畫，踏入一步便覺寒意刺骨。" },
+  { floor: 3, name: "亂碼陵墓", desc: "古老的墓碑上閃爍著錯亂的字節與遺言，死去的守衛已被文字重構。" },
+  { floor: 4, name: "斷章深淵", desc: "失去了上下文的斷章裂谷，星辰與深淵的文字在此處劇烈碰撞。" },
+  { floor: 5, name: "原典王座", desc: "萬物文字化的源頭，純白與漆黑的原典文字拱衛著最深處的王座。" },
+];
+
+// 測試者專屬無敵套裝（點擊左上角「測試者」按鈕一鍵獲得：物理武器、魔法武器、物防、魔防全部 999）
+const TESTER_EQUIP_SET = {
+  physWeapon: {
+    slot: "physWeapon",
+    name: "測試者無敵聖劍",
+    physAtk: TESTER_STAT_VAL,
+    isTesterItem: true,
+    textDesc: "【測試者模式】已裝備無敵物理武器（物攻 999）。",
+  },
+  magWeapon: {
+    slot: "magWeapon",
+    name: "測試者無敵魔典",
+    magAtk: TESTER_STAT_VAL,
+    isTesterItem: true,
+    textDesc: "【測試者模式】已裝備無敵魔法武器（魔攻 999）。",
+  },
+  armor: {
+    slot: "armor",
+    name: "測試者無敵神甲",
+    physDef: TESTER_STAT_VAL,
+    magDef: TESTER_STAT_VAL,
+    isTesterItem: true,
+    textDesc: "【測試者模式】已裝備無敵裝甲（物防 999／魔防 999）。",
+  },
+};
+
+// 1–5 層怪物與攜帶裝備設定表（方案 B：小怪 HP +10%，baseStats 輕量加成攻擊 +1~+2、弱點防禦 +1~+3，掉落 items 維持原始數值）
+const FLOOR_MONSTERS = {
+  1: [
+    {
+      name: "墨染史萊姆", type: "phys", typeLabel: "物理怪", hp: 20, weight: 40,
+      baseStats: { physAtk: 0, magAtk: 0, physDef: 0, magDef: 1 },
+      items: [
+        { slot: "physWeapon", name: "墨痕鈍刺", physAtk: 3, textDesc: "右手掌被黏稠的黑墨浸染，化作了「刺」字...力量湧現。" },
+        { slot: "armor", name: "凝墨外皮", physDef: 6, magDef: 1, textDesc: "胸口肌膚浮現墨色硬甲，化為「革」字...防護提升。" },
+      ],
+    },
+    {
+      name: "漂浮符文妖", type: "mag", typeLabel: "魔法怪", hp: 15, weight: 40,
+      baseStats: { physAtk: 0, magAtk: 0, physDef: 1, magDef: 0 },
+      items: [
+        { slot: "magWeapon", name: "散佚字元杖", magAtk: 4, textDesc: "右臂蔓延出幽藍的筆畫，握柄處凝成了「杖」字...魔力湧動。" },
+        { slot: "armor", name: "虛質殘頁", physDef: 0, magDef: 7, textDesc: "肩頭飄落半透明書頁，皮膚化作了「紋」字...魔抗增強。" },
+        { slot: "shield", name: "浮文字力場", shield: 2, textDesc: "左手浮起旋轉的字元屏障，生成了「盾」字護體力場。" },
+      ],
+    },
+    {
+      name: "墨痕聚合體", type: "chaos", typeLabel: "渾沌怪", hp: 26, weight: 20,
+      baseStats: { physAtk: 0, magAtk: 0, physDef: 1, magDef: 1 },
+      items: [
+        { slot: "physWeapon", name: "錯亂墨骨刃", physAtk: 5, textDesc: "右手骨骼劇痛並扭曲，凝結成一把墨色「刃」字骨刃。" },
+        { slot: "magWeapon", name: "錯亂符文刃", magAtk: 5, textDesc: "左臂被流動的藍光符碼覆蓋，化作散發微光的「咒」字短刃。" },
+        { slot: "armor", name: "拼湊符號殼", physDef: 4, magDef: 4, textDesc: "身軀被交錯的標點符號包裹，化作「甲」字保護內臟。" },
+        { slot: "shield", name: "殘墨重圓盾", shield: 4, textDesc: "左手凝固為厚重墨石，堅實的「壁」字環繞四周。" },
+      ],
+    },
+  ],
+  2: [
+    {
+      name: "蝕刻穴居人", type: "phys", typeLabel: "物理怪", hp: 29, weight: 40,
+      baseStats: { physAtk: 1, magAtk: 0, physDef: 0, magDef: 1 },
+      items: [
+        { slot: "physWeapon", name: "粗糙岩鑿斧", physAtk: 6, textDesc: "小臂肌肉骨化為粗獷的「斧」字...揮擊沉重有力。" },
+        { slot: "armor", name: "石刻重甲", physDef: 10, magDef: 2, textDesc: "軀幹石化剝落，背後烙印著厚重的「磐」字...物防大增。" },
+        { slot: "shield", name: "石板骨盾", shield: 3, textDesc: "一面粗糙的石質骨盾融入左腕，浮現「障」字。" },
+      ],
+    },
+    {
+      name: "洞窟秘術咒靈", type: "mag", typeLabel: "魔法怪", hp: 24, weight: 40,
+      baseStats: { physAtk: 0, magAtk: 1, physDef: 1, magDef: 0 },
+      items: [
+        { slot: "magWeapon", name: "石窟咒印杖", magAtk: 8, textDesc: "指尖流瀉暗色咒文，化作閃耀的「術」字...魔能澎湃。" },
+        { slot: "armor", name: "低語法袍", physDef: 2, magDef: 11, textDesc: "輕柔的絮語纏繞胸膛，皮膚化為幽暗的「霧」字抵禦法術。" },
+        { slot: "shield", name: "幽微咒靈盾", shield: 4, textDesc: "靈體光環在身前結成「御」字符印，吸收衝擊。" },
+      ],
+    },
+    {
+      name: "裂隙蝕骨獸", type: "chaos", typeLabel: "渾沌怪", hp: 37, weight: 20,
+      baseStats: { physAtk: 1, magAtk: 1, physDef: 1, magDef: 1 },
+      items: [
+        { slot: "physWeapon", name: "裂隙碎骨爪", physAtk: 8, textDesc: "右手五指化作泛著骨白的「爪」字...撕裂皮肉。" },
+        { slot: "magWeapon", name: "蝕隙咒魂爪", magAtk: 8, textDesc: "左手纏繞著幽紫色的文字「痕」...魔力破壞力劇增。" },
+        { slot: "armor", name: "骨甲與岩紋", physDef: 7, magDef: 7, textDesc: "肋骨外翻硬化，全身覆蓋「鎧」字符文，防禦均衡。" },
+        { slot: "shield", name: "蝕裂晶盾", shield: 6, textDesc: "晶體碎片在左臂聚合為「晶」字盾牌，堅固無比。" },
+      ],
+    },
+  ],
+  3: [
+    {
+      name: "亂碼骸骨死士", type: "phys", typeLabel: "物理怪", hp: 40, weight: 40,
+      baseStats: { physAtk: 1, magAtk: 0, physDef: 0, magDef: 2 },
+      items: [
+        { slot: "physWeapon", name: "鏽蝕斷碼劍", physAtk: 10, textDesc: "手骨徹底金屬文字化，凝結出殘破的「劍」字鋒刃。" },
+        { slot: "armor", name: "骨片鏈甲", physDef: 15, magDef: 4, textDesc: "鏈條與骨片穿透皮肉，在胸腹拼湊出冰冷的「鐵」字。" },
+        { slot: "shield", name: "亡者木盾", shield: 5, textDesc: "死寂的腐木附著於左臂，化為枯朽的「干」字格擋傷害。" },
+      ],
+    },
+    {
+      name: "哀號字節幽魂", type: "mag", typeLabel: "魔法怪", hp: 33, weight: 40,
+      baseStats: { physAtk: 0, magAtk: 1, physDef: 2, magDef: 0 },
+      items: [
+        { slot: "magWeapon", name: "噪點引魂幡", magAtk: 13, textDesc: "耳旁響起淒厲噪音，掌心文字炸裂為「魄」字魔引。" },
+        { slot: "armor", name: "虛無靈衣", physDef: 4, magDef: 16, textDesc: "身體漸趨透明虛化，軀幹化為空洞的「虛」字避開魔法。" },
+        { slot: "shield", name: "相位符文障", shield: 6, textDesc: "扭曲的字節在周身流轉，形成「界」字阻隔結界。" },
+      ],
+    },
+    {
+      name: "亂碼編譯魔像", type: "chaos", typeLabel: "渾沌怪", hp: 53, weight: 20,
+      baseStats: { physAtk: 1, magAtk: 1, physDef: 2, magDef: 2 },
+      items: [
+        { slot: "physWeapon", name: "編譯破壞槌", physAtk: 12, textDesc: "右臂化作沉重的符碼巨槌，砸下時顯現「碎」字威力。" },
+        { slot: "magWeapon", name: "重構解碼杖", magAtk: 12, textDesc: "左腕重組為閃爍錯誤代碼的法杖，激盪「析」字魔力。" },
+        { slot: "armor", name: "重構金屬軀", physDef: 11, magDef: 11, textDesc: "全身皮膚徹底質變為冰冷符文金屬，「鋼」字入骨。" },
+        { slot: "shield", name: "邏輯壁壘盾", shield: 8, textDesc: "縝密的編譯邏輯化作厚實光盾，顯露「絕」字屏障。" },
+      ],
+    },
+  ],
+  4: [
+    {
+      name: "淵面行刑者", type: "phys", typeLabel: "物理怪", hp: 53, weight: 40,
+      baseStats: { physAtk: 2, magAtk: 0, physDef: 0, magDef: 2 },
+      items: [
+        { slot: "physWeapon", name: "斷頭重鋼斧", physAtk: 15, textDesc: "肌肉撕裂並重組，化為充斥殺戮血光的「斬」字巨刃。" },
+        { slot: "armor", name: "淵黑重鎧", physDef: 22, magDef: 6, textDesc: "深淵重鐵吸附於骨骼，化作沉重而不可撼動的「固」字。" },
+        { slot: "shield", name: "深淵棘盾", shield: 8, textDesc: "尖刺自盾面暴突，刻印著漆黑的「拒」字反斥外力。" },
+      ],
+    },
+    {
+      name: "斷章星象術士", type: "mag", typeLabel: "魔法怪", hp: 44, weight: 40,
+      baseStats: { physAtk: 0, magAtk: 2, physDef: 2, magDef: 0 },
+      items: [
+        { slot: "magWeapon", name: "虛空星象儀", magAtk: 18, textDesc: "星辰軌跡在眼中轉動，指引出無窮星輝的「星」字法器。" },
+        { slot: "armor", name: "星痕深淵袍", physDef: 6, magDef: 23, textDesc: "法袍如同深空夜幕披身，體內鐫刻「曜」字吞噬法能。" },
+        { slot: "shield", name: "星穹光環盾", shield: 9, textDesc: "群星光暈化作環形光幕，在體表形成「域」字護罩。" },
+      ],
+    },
+    {
+      name: "虛空斷章巨靈", type: "chaos", typeLabel: "渾沌怪", hp: 72, weight: 20,
+      baseStats: { physAtk: 2, magAtk: 2, physDef: 2, magDef: 2 },
+      items: [
+        { slot: "physWeapon", name: "湮滅碎裂核", physAtk: 17, textDesc: "右掌中文字崩塌為引力核心，爆發「坍」字物理重擊。" },
+        { slot: "magWeapon", name: "虛無噬靈核", magAtk: 17, textDesc: "左手浮現深空文字漩渦，釋放撕裂維度的「噬」字魔能。" },
+        { slot: "armor", name: "次元褶皺護甲", physDef: 16, magDef: 16, textDesc: "空間褶皺化為戰衣，身軀化為折射萬物的「界」字防甲。" },
+        { slot: "shield", name: "虛無湮滅盾", shield: 12, textDesc: "空間虛無深洞化作巨盾，浮現「封」字抵禦衝擊。" },
+      ],
+    },
+  ],
+  5: [
+    {
+      name: "原典禁衛巨兵", type: "phys", typeLabel: "物理怪", hp: 68, weight: 40,
+      baseStats: { physAtk: 2, magAtk: 0, physDef: 0, magDef: 3 },
+      items: [
+        { slot: "physWeapon", name: "王座金敕戟", physAtk: 21, textDesc: "神聖金光貫通右臂，血肉完形為神聖威嚴的「敕」字金戟。" },
+        { slot: "armor", name: "原典神聖板甲", physDef: 30, magDef: 8, textDesc: "宛如聖殿梁柱般的純白文字化作胸甲，「城」字固若金湯。" },
+        { slot: "shield", name: "原初巨壁盾", shield: 12, textDesc: "原初文字構成的通天巨壁，散發不可逾越的「塹」字神威。" },
+      ],
+    },
+    {
+      name: "王座吟唱主教", type: "mag", typeLabel: "魔法怪", hp: 57, weight: 40,
+      baseStats: { physAtk: 0, magAtk: 2, physDef: 3, magDef: 0 },
+      items: [
+        { slot: "magWeapon", name: "終焉聖典", magAtk: 25, textDesc: "原典之言在心頭響起，右手捧起散發耀眼光芒的「典」字之書。" },
+        { slot: "armor", name: "審判聖輝袍", physDef: 8, magDef: 31, textDesc: "聖潔經文流淌周身，皮膚化作「聖」字，一切魔法皆化泡影。" },
+        { slot: "shield", name: "聖言庇護盾", shield: 14, textDesc: "頌唱之聲具象化為聖光壁，形成「佑」字終極聖盾。" },
+      ],
+    },
+    {
+      name: "文字同化核心", type: "chaos", typeLabel: "渾沌怪", hp: 94, weight: 20,
+      baseStats: { physAtk: 2, magAtk: 2, physDef: 3, magDef: 3 },
+      items: [
+        { slot: "physWeapon", name: "原典創生之刃", physAtk: 23, textDesc: "右臂文字凝聚為萬物實體，化為裁斷因果的「創」字巨劍。" },
+        { slot: "magWeapon", name: "原典終焉法杖", magAtk: 23, textDesc: "左手文字昇華為能量狂潮，點燃終結萬象的「滅」字法杖。" },
+        { slot: "armor", name: "文字萬象本體", physDef: 22, magDef: 22, textDesc: "全身完全同化為純粹文字，浮現「元」字不可摧毀之體。" },
+        { slot: "shield", name: "本源真理盾", shield: 16, textDesc: "真理文字構築的絕對防禦，展現終極「極」字力場。" },
+      ],
+    },
+  ],
+};
+
+// 第 1–4 層跨層寶箱裝備池（每層 4 件：物理武器、魔法武器、裝甲、護盾各 1 件，開寶箱時隨機 4 抽 1）
+const FLOOR_CHEST_ITEMS = {
+  1: [
+    { slot: "physWeapon", name: "篆刻黑鐵劍", physAtk: 6, textDesc: "右手掌浮現鋒利的黑鐵筆畫，化作「鋒」字...斬擊更為凌厲。" },
+    { slot: "magWeapon", name: "螢光殘卷杖", magAtk: 6, textDesc: "左手指尖凝聚微光字元，化作「螢」字法杖...魔力穩定輸出。" },
+    { slot: "armor", name: "碑文護心鏡", physDef: 6, magDef: 6, textDesc: "胸前烙印出古樸的碑文，化作「護」字...物魔防護同時提升。" },
+    { slot: "shield", name: "凝字方盾", shield: 3, textDesc: "左臂文字緊密交織，化為堅固的「防」字方盾。" },
+  ],
+  2: [
+    { slot: "physWeapon", name: "碎岩重字錘", physAtk: 9, textDesc: "右臂骨肉與岩石文字融合，化作「錘」字...一擊足以碎石。" },
+    { slot: "magWeapon", name: "幽谷迴響杖", magAtk: 10, textDesc: "左手繚繞著石窟的低語文字，化作「響」字...魔能激盪。" },
+    { slot: "armor", name: "刻紋岩晶鎧", physDef: 9, magDef: 9, textDesc: "全身覆蓋上結晶化的岩紋文字，化作「堅」字重鎧。" },
+    { slot: "shield", name: "石髓壁壘盾", shield: 5, textDesc: "深層石髓文字在左腕隆起，化作厚重的「壘」字護盾。" },
+  ],
+  3: [
+    { slot: "physWeapon", name: "破碼斬鐵刀", physAtk: 14, textDesc: "右手徹底化為閃爍寒光的代碼刀刃，浮現「斷」字鋒芒。" },
+    { slot: "magWeapon", name: "亂流演算杖", magAtk: 15, textDesc: "左手被高速流動的演算符碼吞沒，化作「算」字魔杖。" },
+    { slot: "armor", name: "秘銀代碼甲", physDef: 14, magDef: 14, textDesc: "軀幹被精密的符文鎖甲覆蓋，烙印出無懈可擊的「密」字。" },
+    { slot: "shield", name: "防禦矩陣盾", shield: 8, textDesc: "立體文字矩陣在身前展開，凝結成「陣」字光盾。" },
+  ],
+  4: [
+    { slot: "physWeapon", name: "深淵裂界槍", physAtk: 19, textDesc: "右臂與深淵文字同化，延伸出貫穿空間的「裂」字長槍。" },
+    { slot: "magWeapon", name: "星淵詠嘆書", magAtk: 21, textDesc: "左手懸浮著吞吐星光的深淵法典，化作「詠」字魔導器。" },
+    { slot: "armor", name: "虛空星鎧", physDef: 19, magDef: 19, textDesc: "星辰與虛空文字交織成戰甲，胸口閃耀著「宙」字神威。" },
+    { slot: "shield", name: "次元折躍盾", shield: 12, textDesc: "扭曲的次元文字固定在左臂，化為偏轉萬物的「折」字巨盾。" },
+  ],
+};
+
+// 第 5 層一階段魔王設定（方案 B：HP 120，加上 baseStats +2/+2 後總雙攻 30、總雙防 28；擊敗前完全不顯示前勇者字眼）
+const BOSS = {
+  name: "文字魔王",
+  fullTitle: "文字魔王",
+  type: "chaos",
+  typeLabel: "魔王",
+  hp: 120,
+  isBoss: true,
+  baseStats: { physAtk: 2, magAtk: 2, physDef: 2, magDef: 2 },
+  items: [
+    { slot: "physWeapon", name: "褪色誓約聖劍·破甲", physAtk: 28, textDesc: "昔日聖劍的物理鋒芒，鏽跡斑斑卻飽含殺意。" },
+    { slot: "magWeapon", name: "褪色誓約聖劍·魔湧", magAtk: 28, textDesc: "昔日聖劍的殘留光輝，如今轉化為文字詛咒魔潮。" },
+    { slot: "armor", name: "破碎文字枷鎖鎧", physDef: 26, magDef: 26, textDesc: "被無數文字生生烙印在肉身骨髓的束縛重甲，無法脫卸。" },
+    { slot: "shield", name: "苦痛抗爭之盾", shield: 20, textDesc: "殘留著微弱抗爭意識的盾牌，偶爾發出低沉哀鳴。" },
+  ],
+};
+
+// 擊敗一階段魔王後獲得之特殊遺物飾品【勇者之劍】（方案 B：回復 80% 最大生命、初始攻擊 ×1.45、擋死 2 次且每次衰減 0.15 並重鑄滿額護盾）
+const HERO_SWORD_ITEM = {
+  slot: "accessory",
+  name: "勇者之劍",
+  isHeroSword: true,
+  atkMult: HERO_SWORD_ATK_MULT,
+  blocksLeft: HERO_SWORD_MAX_BLOCKS,
+  desc: "前代勇者託付的非文字遺物。初始攻擊力 ×1.45，首次取得回復 80% 最大生命，並由劍中殘魂替勇者擋下最多 2 次致命傷（鎖 1 血並重鑄護盾，每擋死 1 次攻擊倍率下降 0.15）。",
+};
+
+// 第 5 層二階段心魔設定（方案 B：HP 135，半血前只顯示 @$+%^&¥，不寫真魔王或沙坦）
+const PHASE2_BOSS = {
+  name: PHASE2_BOSS_HIDDEN_NAME,
+  trueName: PHASE2_BOSS_TRUE_NAME,
+  type: "chaos",
+  typeLabel: PHASE2_BOSS_HIDDEN_NAME,
+  hp: PHASE2_BOSS_HP,
+  isPhase2Boss: true,
+};
+
+
+// 52 張標準撲克牌設定（不含鬼牌，A=1, 2–10, J=11, Q=12, K=13）
+const POKER_SUITS = [
+  { key: "S", symbol: "♠", name: "黑桃", colorClass: "is-black" },
+  { key: "H", symbol: "♥", name: "紅心", colorClass: "is-red" },
+  { key: "D", symbol: "♦", name: "方塊", colorClass: "is-red" },
+  { key: "C", symbol: "♣", name: "梅花", colorClass: "is-black" },
+];
+
+const POKER_RANKS = [
+  { rank: "A",  value: 1 },
+  { rank: "2",  value: 2 },
+  { rank: "3",  value: 3 },
+  { rank: "4",  value: 4 },
+  { rank: "5",  value: 5 },
+  { rank: "6",  value: 6 },
+  { rank: "7",  value: 7 },
+  { rank: "8",  value: 8 },
+  { rank: "9",  value: 9 },
+  { rank: "10", value: 10 },
+  { rank: "J",  value: 11 },
+  { rank: "Q",  value: 12 },
+  { rank: "K",  value: 13 },
+];
+
+// 標準撲克牌 2～10 點數的花色座標 (x%, y%, 是否 180 度倒置)
+const POKER_PIP_LAYOUTS = {
+  2: [[50, 18, false], [50, 82, true]],
+  3: [[50, 16, false], [50, 50, false], [50, 84, true]],
+  4: [[28, 18, false], [72, 18, false], [28, 82, true], [72, 82, true]],
+  5: [[28, 18, false], [72, 18, false], [50, 50, false], [28, 82, true], [72, 82, true]],
+  6: [[28, 16, false], [72, 16, false], [28, 50, false], [72, 50, false], [28, 84, true], [72, 84, true]],
+  7: [[28, 16, false], [72, 16, false], [50, 33, false], [28, 50, false], [72, 50, false], [28, 84, true], [72, 84, true]],
+  8: [[28, 16, false], [72, 16, false], [50, 33, false], [28, 50, false], [72, 50, false], [50, 67, true], [28, 84, true], [72, 84, true]],
+  9: [[26, 14, false], [74, 14, false], [26, 38, false], [74, 38, false], [50, 50, false], [26, 62, true], [74, 62, true], [26, 86, true], [74, 86, true]],
+  10: [[26, 14, false], [74, 14, false], [50, 26, false], [26, 38, false], [74, 38, false], [26, 62, true], [74, 62, true], [50, 74, true], [26, 86, true], [74, 86, true]],
+};
+
+/* =========================================================
+   遊戲核心狀態與邏輯 (game.js - 第七版 v7)
+   包含：方案 B 標準平衡數值、左上角「測試者」按鈕（999 無敵套裝＋自由選層）、
+   頂部面板「物攻｜物防｜魔攻｜魔防」位置對調、雙模式穿盾與花色加成、
+   一階段魔王掙扎／暴走（擊敗前保密前勇者身分）、勇者之劍殘魂燃燒、
+   二階段心魔戰（半血前保密真名只顯示 @$+%^&¥，半血後顯露真名文字.沙坦）
+   ========================================================= */
+let hero, floor, round, turn, floorDeck, enemy, gameOver;
+let gameMode = "dice"; // "dice" (0–20 骰子模式) 或 "poker" (1–13 撲克模式)
+let lastDrawnCard = null; // 紀錄最近一次抽出的撲克牌資訊
+let equipExpanded = false; // 頂部裝備抽屜展開狀態
+let isBattleDrawerActive = false; // 是否正在拉下的戰鬥對話框中輸出
+let historyLogs = []; // 歷史對話紀錄（包含一般對話、戰鬥標題、戰鬥對話與雙行戰報）
+
+const $status = document.getElementById("status");
+const $enemyPanel = document.getElementById("enemy-panel");
+const $dialogueStage = document.getElementById("dialogue-stage");
+const $log = document.getElementById("log");
+const $battleIntroOverlay = document.getElementById("battle-intro-overlay");
+const $battleDrawer = document.getElementById("battle-drawer");
+const $battleDrawerTitle = document.getElementById("battle-drawer-title");
+const $battleLog = document.getElementById("battle-log");
+const $choices = document.getElementById("choices");
+const $historyModal = document.getElementById("history-modal");
+const $historyContent = document.getElementById("history-content");
+const $testerModal = document.getElementById("tester-modal");
+const $testerFloorList = document.getElementById("tester-floor-list");
+
+/* ===== 小工具 ===== */
+function escapeHtml(t) {
+  return String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function buildNameRegex() {
+  const escapedKeys = Object.keys(ENEMY_COLORS)
+    .sort((a, b) => b.length - a.length)
+    .map(escapeRegExp);
+  const htmlEscapedHidden = escapeRegExp(escapeHtml(PHASE2_BOSS_HIDDEN_NAME));
+  if (!escapedKeys.includes(htmlEscapedHidden)) {
+    escapedKeys.push(htmlEscapedHidden);
+  }
+  return new RegExp("(勇者)|(" + escapedKeys.join("|") + ")", "g");
+}
+
+const NAME_REGEX = buildNameRegex();
+
+function colorize(html) {
+  return html.replace(NAME_REGEX, (m, isHero) => {
+    if (isHero) return `<span class="name" style="color:${HERO_COLOR}">${m}</span>`;
+    const rawKey = m.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"');
+    const isBoss = (rawKey === "文字魔王" || rawKey === PHASE2_BOSS_HIDDEN_NAME || rawKey === PHASE2_BOSS_TRUE_NAME || rawKey === "真魔王")
+      ? " name-boss"
+      : "";
+    return `<span class="name${isBoss}" style="color:${ENEMY_COLORS[rawKey] || "#ff5c5c"}">${m}</span>`;
+  });
+}
+
+// 將 #rrggbb 色碼轉為 rgba 字串，供敵人對戰卡外框微光使用
+function hexToRgba(hex, alpha) {
+  const clean = String(hex || "#ff5c5c").replace("#", "");
+  if (clean.length !== 6) return `rgba(255, 92, 92, ${alpha})`;
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function rollD20() { return Math.floor(Math.random() * 21); } // 0–20
+
+// 從 52 張標準撲克牌（4 花色 × 13 點數，不含鬼牌）隨機洗抽 1 張
+function drawPokerCard() {
+  const suit = POKER_SUITS[Math.floor(Math.random() * POKER_SUITS.length)];
+  const rankObj = POKER_RANKS[Math.floor(Math.random() * POKER_RANKS.length)];
+  return {
+    suit,
+    rank: rankObj.rank,
+    value: rankObj.value,
+    label: `${suit.symbol}${rankObj.rank}`,
+    fullLabel: `${suit.name}${suit.symbol}${rankObj.rank}`,
+  };
+}
+
+// 宮廷人頭牌 (J=騎士、Q=皇后、K=國王) 向量圖騰
+function getCourtSvg(rank) {
+  if (rank === "J") {
+    return `<svg viewBox="0 0 60 90" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 22 L30 10 L42 22 L38 40 L22 40 Z" fill="currentColor" fill-opacity="0.12"/><path d="M22 28 H38 M30 10 V40"/><path d="M14 58 C14 46, 46 46, 46 58 L50 74 H10 Z" fill="currentColor" fill-opacity="0.18"/><path d="M46 14 L46 76 M46 18 L54 24 L46 30"/><circle cx="30" cy="56" r="3" fill="currentColor"/></svg>`;
+  }
+  if (rank === "Q") {
+    return `<svg viewBox="0 0 60 90" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 28 L20 14 L30 24 L40 14 L46 28 Z" fill="currentColor" fill-opacity="0.22"/><circle cx="20" cy="11" r="2" fill="currentColor"/><circle cx="30" cy="10" r="2.5" fill="currentColor"/><circle cx="40" cy="11" r="2" fill="currentColor"/><circle cx="30" cy="39" r="9" fill="currentColor" fill-opacity="0.1"/><path d="M13 74 C15 54, 45 54, 47 74 Z" fill="currentColor" fill-opacity="0.18"/><path d="M22 54 L30 64 L38 54"/><circle cx="47" cy="44" r="4.5" fill="currentColor" fill-opacity="0.25"/><path d="M47 49 V72"/></svg>`;
+  }
+  return `<svg viewBox="0 0 60 90" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 28 L16 12 L25 22 L30 10 L35 22 L44 12 L48 28 Z" fill="currentColor" fill-opacity="0.25"/><path d="M30 5 V10 M27 7 H33"/><rect x="19" y="30" width="22" height="16" rx="4" fill="currentColor" fill-opacity="0.1"/><path d="M23 42 L30 48 L37 42"/><path d="M11 75 C13 52, 47 52, 49 75 Z" fill="currentColor" fill-opacity="0.2"/><path d="M16 18 L44 72 M12 24 L22 16"/><circle cx="30" cy="60" r="3" fill="currentColor"/></svg>`;
+}
+
+function renderCardBackHtml() {
+  return `<div class="poker-card-back"><div class="card-back-inner"><div class="card-back-emblem"><span>勇✦魔</span></div></div></div>`;
+}
+
+function renderPokerCardHtml(card) {
+  const val = card.value;
+  const r = card.rank;
+  const s = card.suit.symbol;
+  let centerContent = "";
+  if (val === 1) {
+    centerContent = `<div class="pip-ace">${s}</div>`;
+  } else if (val >= 2 && val <= 10) {
+    const coords = POKER_PIP_LAYOUTS[val] || [];
+    const denseClass = val >= 9 ? "dense" : "";
+    const pipsHtml = coords.map(([x, y, inv]) =>
+      `<span class="pip${inv ? " inv" : ""}" style="left:${x}%; top:${y}%;">${s}</span>`
+    ).join("");
+    centerContent = `<div class="pip-grid ${denseClass}">${pipsHtml}</div>`;
+  } else {
+    centerContent = `<div class="court-box"><span class="court-suit-tl">${s}</span>${getCourtSvg(r)}<span class="court-watermark">${r}=${val}</span><span class="court-suit-br">${s}</span></div>`;
+  }
+  return `<div class="poker-card ${card.suit.colorClass}"><div class="card-corner top-left"><span class="corner-rank">${r}</span><span class="corner-suit">${s}</span></div><div class="card-center">${centerContent}</div><div class="card-corner bottom-right"><span class="corner-rank">${r}</span><span class="corner-suit">${s}</span></div></div>`;
+}
+
+function randomPick(list) { return list[Math.floor(Math.random() * list.length)]; }
+function weightedPick(list) {
+  const total = list.reduce((s, x) => s + x.weight, 0);
+  let r = Math.random() * total;
+  for (const x of list) { if ((r -= x.weight) < 0) return x; }
+  return list[list.length - 1];
+}
+
+// 格式化單件裝備顯示文字
+function itemText(item) {
+  if (!item) return "無";
+  if (item.slot === "physWeapon") return `${item.name}（物攻+${item.physAtk}）`;
+  if (item.slot === "magWeapon") return `${item.name}（魔攻+${item.magAtk}）`;
+  if (item.slot === "armor") return `${item.name}（物防+${item.physDef}／魔防+${item.magDef}）`;
+  if (item.slot === "shield") return `${item.name}（護盾+${item.shield}）`;
+  if (item.slot === "accessory") {
+    if (item.isHeroSword) {
+      const blocks = item.blocksLeft > 0 ? `殘魂擋死剩餘 ${item.blocksLeft} 次` : "殘魂已消逝";
+      const multStr = item.atkMult > 1 ? `攻擊×${item.atkMult}／` : "攻擊加成已消逝／";
+      return `${item.name}（${multStr}${blocks}）`;
+    }
+    return item.desc ? `${item.name}（${item.desc}）` : item.name;
+  }
+  return item.name;
+}
+
+// 從基礎數值與裝備計算實際雙攻、雙防與護盾
+// 註：若穿戴測試者無敵套裝 (isTesterItem)，該項數值固定顯示為 999；allowAccessory = true 時計算飾品【勇者之劍】倍率
+function calcStats(base, equip, allowAccessory = true) {
+  let physAtk = (equip.physWeapon && equip.physWeapon.isTesterItem)
+    ? TESTER_STAT_VAL
+    : (base.physAtk || 0) + (equip.physWeapon ? equip.physWeapon.physAtk : 0);
+  let magAtk = (equip.magWeapon && equip.magWeapon.isTesterItem)
+    ? TESTER_STAT_VAL
+    : (base.magAtk || 0) + (equip.magWeapon ? equip.magWeapon.magAtk : 0);
+  const physDef = (equip.armor && equip.armor.isTesterItem)
+    ? TESTER_STAT_VAL
+    : (base.physDef || 0) + (equip.armor ? equip.armor.physDef : 0);
+  const magDef = (equip.armor && equip.armor.isTesterItem)
+    ? TESTER_STAT_VAL
+    : (base.magDef || 0) + (equip.armor ? equip.armor.magDef : 0);
+  const shield = (base.shield || 0) + (equip.shield ? equip.shield.shield : 0);
+
+  if (allowAccessory && equip.accessory && equip.accessory.atkMult && equip.accessory.atkMult > 1) {
+    physAtk = Math.floor(physAtk * equip.accessory.atkMult);
+    magAtk = Math.floor(magAtk * equip.accessory.atkMult);
+  }
+  return { physAtk, magAtk, physDef, magDef, shield };
+}
+
+// 二階段心魔複製勇者屬性時，若勇者穿戴的是「測試者 999 無敵套裝」，心魔只複製第 5 層標準數值，避免測試時卡死
+function calcMirrorStatsForPhase2(base, equip) {
+  const safeEquip = {
+    physWeapon: (equip.physWeapon && equip.physWeapon.isTesterItem) ? { physAtk: 21 } : equip.physWeapon,
+    magWeapon: (equip.magWeapon && equip.magWeapon.isTesterItem) ? { magAtk: 21 } : equip.magWeapon,
+    armor: (equip.armor && equip.armor.isTesterItem) ? { physDef: 20, magDef: 20 } : equip.armor,
+    shield: equip.shield,
+  };
+  return calcStats(base, safeEquip, false);
+}
+
+// 檢查勇者是否全程未穿戴任何文字裝備（完全徒手／初始狀態）
+function isCompletelyUnarmed() {
+  if (!hero || !hero.equip) return false;
+  return !hero.equip.physWeapon && !hero.equip.magWeapon && !hero.equip.armor && !hero.equip.shield;
+}
+
+function getFloorInfo(fl) {
+  return FLOORS.find(f => f.floor === fl) || { floor: fl, name: `第 ${fl} 層`, desc: "" };
+}
+
+/* ===== 畫面輸出（一般對話框 + 戰鬥拉簾對話框 + 歷史對話紀錄） ===== */
+function log(text, cls) {
+  const html = colorize(escapeHtml(text));
+  const p = document.createElement("p");
+  p.innerHTML = html;
+  if (cls) p.className = cls;
+
+  const targetBox = (isBattleDrawerActive && $battleLog) ? $battleLog : $log;
+  targetBox.appendChild(p);
+  targetBox.scrollTop = targetBox.scrollHeight;
+
+  historyLogs.push({
+    kind: isBattleDrawerActive ? "battle" : "general",
+    html,
+    cls: cls || "",
+  });
+}
+
+function sep() { log("────────────────────────", "sep"); }
+
+// 雙行戰報輸出（第 1 行：招式與總傷害結果；第 2 行：無「└ 算式：」前綴之純算式）
+function logCombatReport(isHero, mainText, formulaText) {
+  const mainHtml = colorize(escapeHtml(mainText));
+  const formulaHtml = colorize(escapeHtml(formulaText));
+  const div = document.createElement("div");
+  div.className = "combat-report" + (isHero ? "" : " enemy-atk");
+  div.innerHTML = `<div class="line-main">${mainHtml}</div><div class="line-formula">${formulaHtml}</div>`;
+
+  const targetBox = (isBattleDrawerActive && $battleLog) ? $battleLog : $log;
+  targetBox.appendChild(div);
+  targetBox.scrollTop = targetBox.scrollHeight;
+
+  historyLogs.push({
+    kind: "combat_report",
+    isHero,
+    mainHtml,
+    formulaHtml,
+  });
+}
+
+function openHistoryModal() {
+  if (!$historyModal || !$historyContent) return;
+  $historyContent.innerHTML = "";
+  if (historyLogs.length === 0) {
+    const emptyP = document.createElement("p");
+    emptyP.className = "dim";
+    emptyP.textContent = "目前尚無歷史對話紀錄。";
+    $historyContent.appendChild(emptyP);
+  } else {
+    historyLogs.forEach(entry => {
+      if (entry.kind === "battle_header") {
+        const h = document.createElement("div");
+        h.className = "history-battle-header";
+        h.innerHTML = colorize(escapeHtml(entry.title));
+        $historyContent.appendChild(h);
+      } else if (entry.kind === "combat_report") {
+        const div = document.createElement("div");
+        div.className = "combat-report" + (entry.isHero ? "" : " enemy-atk");
+        div.innerHTML = `<div class="line-main">${entry.mainHtml}</div><div class="line-formula">${entry.formulaHtml}</div>`;
+        $historyContent.appendChild(div);
+      } else {
+        const p = document.createElement("p");
+        if (entry.cls) p.className = entry.cls;
+        p.innerHTML = entry.html;
+        $historyContent.appendChild(p);
+      }
+    });
+  }
+  $historyModal.classList.remove("hidden");
+  $historyContent.scrollTop = $historyContent.scrollHeight;
+}
+
+function closeHistoryModal() {
+  if ($historyModal) $historyModal.classList.add("hidden");
+}
+
+const $btnCloseHistory = document.getElementById("btn-close-history");
+if ($btnCloseHistory) {
+  $btnCloseHistory.onclick = closeHistoryModal;
+}
+if ($historyModal) {
+  $historyModal.addEventListener("click", e => {
+    if (e.target === $historyModal) closeHistoryModal();
+  });
+}
+
+/* ===== 第七版新增：左上角「測試者」按鈕（一鍵獲得 999 無敵套裝 ＋ 自由選擇前往樓層） ===== */
+function equipTesterSuit() {
+  if (!hero) return;
+  hero.equip.physWeapon = { ...TESTER_EQUIP_SET.physWeapon };
+  hero.equip.magWeapon = { ...TESTER_EQUIP_SET.magWeapon };
+  hero.equip.armor = { ...TESTER_EQUIP_SET.armor };
+  hero.hp = hero.maxHp;
+}
+
+function jumpToTesterFloor(targetFloor, targetRound = 1) {
+  closeTesterModal();
+  isBattleDrawerActive = false;
+  if ($battleDrawer) $battleDrawer.classList.remove("open");
+  if ($battleLog) $battleLog.innerHTML = "";
+  enemy = null;
+  gameOver = false;
+
+  floor = targetFloor;
+  round = targetRound;
+  floorDeck = buildFloorDeck(floor);
+  hero.maxHp = HERO_BASE.hp + (floor - 1) * FLOOR_HP_BONUS;
+  hero.hp = hero.maxHp;
+  equipTesterSuit();
+
+  const fInfo = getFloorInfo(floor);
+  $log.innerHTML = "";
+  log(`【測試者模式】已裝備無敵套裝（物理武器 999、魔法武器 999、物理防禦 999、魔法防禦 999），並傳送至第 ${floor} 層【${fInfo.name}】（第 ${round} 回合）！`, "big");
+  presentRound();
+}
+
+function openTesterModal() {
+  if (!hero) return;
+  equipTesterSuit();
+  renderStatus();
+
+  if (!$testerModal || !$testerFloorList) return;
+  $testerFloorList.innerHTML = "";
+
+  FLOORS.forEach(f => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = `前往第 ${f.floor} 層【${f.name}】（第 1 回合）`;
+    btn.onclick = () => jumpToTesterFloor(f.floor, 1);
+    $testerFloorList.appendChild(btn);
+  });
+
+  const btnBoss = document.createElement("button");
+  btnBoss.type = "button";
+  btnBoss.textContent = "直達第 5 層【文字魔王戰】（第 6 回合）";
+  btnBoss.onclick = () => jumpToTesterFloor(5, ROUNDS_PER_FLOOR);
+  $testerFloorList.appendChild(btnBoss);
+
+  const btnStay = document.createElement("button");
+  btnStay.type = "button";
+  btnStay.textContent = "留在當前位置繼續（僅穿戴 999 無敵套裝）";
+  btnStay.onclick = () => {
+    closeTesterModal();
+    log("【測試者模式】已穿戴 999 無敵套裝（物理武器 999、魔法武器 999、物理防禦 999、魔法防禦 999）！", "hit");
+    renderStatus();
+    if (enemy) showCombatButtons();
+  };
+  $testerFloorList.appendChild(btnStay);
+
+  $testerModal.classList.remove("hidden");
+}
+
+function closeTesterModal() {
+  if ($testerModal) $testerModal.classList.add("hidden");
+}
+
+const $btnCloseTester = document.getElementById("btn-close-tester");
+if ($btnCloseTester) {
+  $btnCloseTester.onclick = closeTesterModal;
+}
+if ($testerModal) {
+  $testerModal.addEventListener("click", e => {
+    if (e.target === $testerModal) closeTesterModal();
+  });
+}
+
+function setChoices(list) {
+  if (document.activeElement && typeof document.activeElement.blur === "function") {
+    document.activeElement.blur();
+  }
+  $choices.innerHTML = "";
+  list.forEach(({ label, action }) => {
+    const b = document.createElement("button");
+    b.innerHTML = colorize(escapeHtml(label));
+    b.onclick = () => {
+      b.blur();
+      action();
+    };
+    $choices.appendChild(b);
+  });
+}
+
+// 渲染第 1 部分（頂部勇者資訊欄：左上角附「測試者」按鈕；第 3 行順序改為「物攻｜物防｜魔攻｜魔防」）與第 2 部分（敵人對戰卡）
+function renderStatus() {
+  const s = calcStats(HERO_BASE, hero.equip, true);
+  const curShield = enemy ? hero.shield : s.shield;
+  const maxShield = s.shield;
+  const hpCur = Math.max(0, hero.hp);
+  const hpPct = hero.maxHp > 0 ? Math.max(0, Math.min(100, (hpCur / hero.maxHp) * 100)) : 0;
+  const shPct = maxShield > 0 ? Math.max(0, Math.min(100, (Math.max(0, curShield) / maxShield) * 100)) : 0;
+
+  const fInfo = getFloorInfo(floor);
+  const modeTag = gameMode === "poker" ? "［撲克模式］" : "［骰子模式］";
+  const stageTitle = (enemy && enemy.isPhase2Boss)
+    ? `勇者${modeTag}　精神世界【心魔決戰】`
+    : `勇者${modeTag}　第 ${floor} 層【${fInfo.name}】　第 ${round} / ${ROUNDS_PER_FLOOR} 回合`;
+
+  const equipBtnLabel = equipExpanded ? "裝備 ▲" : "裝備 ▼";
+  const equipBtnActive = equipExpanded ? " active" : "";
+  const drawerHidden = equipExpanded ? "" : " hidden";
+
+  const statusHtml = `
+    <div class="panel-row-top">
+      <div class="panel-title-group">
+        <button type="button" class="tester-btn" id="btn-tester">測試者</button>
+        <div class="panel-title">${colorize(escapeHtml(stageTitle))}</div>
+      </div>
+      <div class="header-actions">
+        <button type="button" class="mini-btn${equipBtnActive}" id="btn-toggle-equip">${equipBtnLabel}</button>
+        <button type="button" class="mini-btn" id="btn-open-history">歷史對話</button>
+      </div>
+    </div>
+    <div class="bars-row">
+      <div class="stat-bar-group">
+        <span class="stat-label">生命</span>
+        <div class="bar-track"><div class="bar-fill hp-hero" style="width:${hpPct}%"></div></div>
+        <span class="stat-num">${hpCur} / ${hero.maxHp}</span>
+      </div>
+      <div class="stat-bar-group">
+        <span class="stat-label">護盾</span>
+        <div class="bar-track"><div class="bar-fill shield-fill" style="width:${shPct}%"></div></div>
+        <span class="stat-num">${Math.max(0, curShield)} / ${maxShield}</span>
+      </div>
+    </div>
+    <div class="stats-quad-row">
+      <div class="stat-cell">物攻 <span class="val">${s.physAtk}</span></div>
+      <div class="stat-cell">物防 <span class="val">${s.physDef}</span></div>
+      <div class="stat-cell">魔攻 <span class="val">${s.magAtk}</span></div>
+      <div class="stat-cell">魔防 <span class="val">${s.magDef}</span></div>
+    </div>
+    <div id="equip-drawer" class="${drawerHidden.trim()}">
+      <div>物理武器：${escapeHtml(itemText(hero.equip.physWeapon))}</div>
+      <div>魔法武器：${escapeHtml(itemText(hero.equip.magWeapon))}</div>
+      <div>裝甲：${escapeHtml(itemText(hero.equip.armor))}</div>
+      <div>盾牌：${escapeHtml(itemText(hero.equip.shield))}</div>
+      <div>飾品：${escapeHtml(itemText(hero.equip.accessory))}</div>
+    </div>`;
+
+  $status.innerHTML = statusHtml;
+
+  const $btnTester = document.getElementById("btn-tester");
+  if ($btnTester) {
+    $btnTester.onclick = openTesterModal;
+  }
+  const $btnEquip = document.getElementById("btn-toggle-equip");
+  if ($btnEquip) {
+    $btnEquip.onclick = () => {
+      equipExpanded = !equipExpanded;
+      renderStatus();
+    };
+  }
+  const $btnHist = document.getElementById("btn-open-history");
+  if ($btnHist) {
+    $btnHist.onclick = openHistoryModal;
+  }
+
+  // 第 2 部分：獨立 3 行「敵人對戰卡」（第 3 行同樣對齊為「物攻｜物防｜魔攻｜魔防」）
+  if (enemy && $enemyPanel) {
+    const eColor = ENEMY_COLORS[enemy.name] || "#ff5c5c";
+    $enemyPanel.style.setProperty("--enemy-glow", eColor);
+    $enemyPanel.style.setProperty("--enemy-glow-soft", hexToRgba(eColor, 0.42));
+    $enemyPanel.style.setProperty("--enemy-glow-inset", hexToRgba(eColor, 0.14));
+
+    let weakNote = "";
+    if (enemy.weakness === "phys") {
+      weakNote = enemy.isBoss ? "［破綻：物防−30%］" : "［破綻：物防減半］";
+    } else if (enemy.weakness === "mag") {
+      weakNote = enemy.isBoss ? "［破綻：魔防−30%］" : "［破綻：魔防減半］";
+    } else if (enemy.isPhase2Boss) {
+      weakNote = enemy.inRage
+        ? `［真名狂暴：攻擊×${PHASE2_BOSS_RAGE_MULT}］`
+        : `［亂碼侵蝕：攻擊×${PHASE2_BOSS_INIT_MULT}／吸血+${PHASE2_BOSS_LIFESTEAL}］`;
+    }
+
+    const eHpCur = Math.max(0, enemy.hp);
+    const eHpPct = enemy.maxHp > 0 ? Math.max(0, Math.min(100, (eHpCur / enemy.maxHp) * 100)) : 0;
+    const eShMax = enemy.maxShield || 0;
+    const eShCur = Math.max(0, enemy.shield);
+    const eShPct = eShMax > 0 ? Math.max(0, Math.min(100, (eShCur / eShMax) * 100)) : 0;
+
+    const pDefHtml = enemy.weakness === "phys"
+      ? `<span class="debuff">${enemy.curPhysDef}↓</span>`
+      : `<span class="val">${enemy.curPhysDef}</span>`;
+    const mDefHtml = enemy.weakness === "mag"
+      ? `<span class="debuff">${enemy.curMagDef}↓</span>`
+      : `<span class="val">${enemy.curMagDef}</span>`;
+
+    $enemyPanel.innerHTML = `
+      <div class="panel-row-top">
+        <div class="panel-title">敵人：${colorize(escapeHtml(enemy.name))}</div>
+        <div class="enemy-tag">${escapeHtml(weakNote)}</div>
+      </div>
+      <div class="bars-row">
+        <div class="stat-bar-group">
+          <span class="stat-label">生命</span>
+          <div class="bar-track"><div class="bar-fill hp-enemy" style="width:${eHpPct}%"></div></div>
+          <span class="stat-num">${eHpCur} / ${enemy.maxHp}</span>
+        </div>
+        <div class="stat-bar-group">
+          <span class="stat-label">護盾</span>
+          <div class="bar-track"><div class="bar-fill shield-fill" style="width:${eShPct}%"></div></div>
+          <span class="stat-num">${eShCur} / ${eShMax}</span>
+        </div>
+      </div>
+      <div class="stats-quad-row">
+        <div class="stat-cell">物攻 <span class="val">${enemy.physAtk}</span></div>
+        <div class="stat-cell">物防 ${pDefHtml}</div>
+        <div class="stat-cell">魔攻 <span class="val">${enemy.magAtk}</span></div>
+        <div class="stat-cell">魔防 ${mDefHtml}</div>
+      </div>`;
+    $enemyPanel.classList.remove("hidden");
+  } else if ($enemyPanel) {
+    $enemyPanel.classList.add("hidden");
+  }
+}
+
+/* ===== 擲骰、抽撲克牌、戰鬥拉簾對話框與戰鬥效果動畫 ===== */
+const $dice = document.getElementById("dice");
+const $pokerDraw = document.getElementById("poker-draw");
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// 初始化撲克牌背 DOM
+if ($pokerDraw) {
+  $pokerDraw.querySelectorAll(".deck-card, .drawn-face.back").forEach(el => {
+    el.innerHTML = renderCardBackHtml();
+  });
+}
+
+// 進入戰鬥動畫：先顯示「戰鬥開始了！！！」並漸漸消失，隨後從頂部拉下戰鬥對話框
+async function openBattleDrawerAnim(enemyName) {
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if ($battleLog) $battleLog.innerHTML = "";
+  if ($battleDrawerTitle) {
+    $battleDrawerTitle.innerHTML = colorize(`與 ${escapeHtml(enemyName)} 的戰鬥`);
+  }
+
+  if ($battleIntroOverlay && !reduce) {
+    const $txt = document.getElementById("battle-intro-text");
+    if ($txt) $txt.textContent = BATTLE_INTRO_TEXT;
+    $battleIntroOverlay.classList.remove("active");
+    void $battleIntroOverlay.offsetWidth;
+    $battleIntroOverlay.classList.add("active");
+    await sleep(BATTLE_INTRO_MS);
+    $battleIntroOverlay.classList.remove("active");
+  }
+
+  if ($battleDrawer) {
+    $battleDrawer.classList.add("open");
+    if (!reduce) {
+      await sleep(BATTLE_DRAWER_MS);
+    }
+  }
+  isBattleDrawerActive = true;
+}
+
+// 戰鬥結束動畫：從底部往上收回戰鬥對話框
+async function closeBattleDrawerAnim() {
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  isBattleDrawerActive = false;
+  if ($battleDrawer && $battleDrawer.classList.contains("open")) {
+    $battleDrawer.classList.remove("open");
+    if (!reduce) {
+      await sleep(BATTLE_DRAWER_MS);
+    }
+  }
+}
+
+async function rollPokerAnim(who, color, card, note) {
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $who = $pokerDraw.querySelector(".who");
+  const $stage = $pokerDraw.querySelector(".stage-label");
+  const $deckStack = $pokerDraw.querySelector(".deck-stack");
+  const $drawnWrap = $pokerDraw.querySelector(".drawn-card-wrapper");
+  const $drawnFront = $pokerDraw.querySelector(".drawn-face.front");
+  const $badge = $pokerDraw.querySelector(".value-badge");
+  const $note = $pokerDraw.querySelector(".note");
+
+  $who.innerHTML = colorize(escapeHtml(who)) + " 抽撲克牌";
+  $who.style.color = color || "#e8e8e8";
+  $note.innerHTML = colorize(escapeHtml(note || ""));
+  $badge.textContent = "";
+  $drawnFront.innerHTML = renderPokerCardHtml(card);
+  $drawnWrap.style.setProperty("--poker-draw-ms", POKER_DRAW_MS + "ms");
+  $drawnWrap.className = "drawn-card-wrapper";
+
+  $pokerDraw.classList.add("show");
+  if (!reduce) {
+    $stage.textContent = "正在洗牌...";
+    $deckStack.className = "deck-stack shuffling";
+    await sleep(POKER_SHUFFLE_MS);
+
+    $stage.textContent = "抽出撲克牌！";
+    $deckStack.className = "deck-stack recede";
+    $drawnWrap.className = "drawn-card-wrapper drawing";
+    await sleep(POKER_DRAW_MS);
+  } else {
+    $deckStack.className = "deck-stack recede";
+  }
+
+  $drawnWrap.className = "drawn-card-wrapper landed";
+  const isLetter = (card.rank === "A" || card.rank === "J" || card.rank === "Q" || card.rank === "K");
+  const hint = isLetter ? `（${card.rank} 代表數字 ${card.value}）` : `（點數 ${card.value}）`;
+  $stage.textContent = "抽牌結果";
+  $badge.textContent = `抽中：${card.suit.name} ${card.label} ${hint}`;
+
+  await sleep(POKER_HOLD_MS);
+  $pokerDraw.classList.remove("show");
+  await sleep(120);
+}
+
+async function rollDiceAnim(who, color, result, note) {
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const $who = $dice.querySelector(".who"), $face = $dice.querySelector(".face"), $note = $dice.querySelector(".note");
+  $who.innerHTML = colorize(escapeHtml(who)) + " 擲骰";
+  $who.style.color = color || "#e8e8e8";
+  $note.innerHTML = colorize(escapeHtml(note || ""));
+  $face.classList.remove("landed");
+  $face.style.borderColor = color || "#e8e8e8";
+  $dice.classList.add("show");
+  if (!reduce) {
+    $face.classList.add("rolling");
+    const end = Date.now() + DICE_ROLL_MS;
+    while (Date.now() < end) {
+      $face.textContent = rollD20();
+      await sleep(DICE_TICK_MS);
+    }
+    $face.classList.remove("rolling");
+  }
+  $face.textContent = result;
+  $face.classList.add("landed");
+  await sleep(DICE_HOLD_MS);
+  $dice.classList.remove("show");
+  await sleep(120);
+}
+
+function replayClass(el, cls) {
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+}
+
+async function bossAppearAnim() {
+  const $b = document.getElementById("boss-appear");
+  replayClass($b, "show");
+  await sleep(window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 600 : BOSS_APPEAR_MS);
+  $b.classList.remove("show");
+}
+
+async function storyTextAnim(text) {
+  const $t = document.querySelector("#story .text");
+  $t.innerHTML = colorize(escapeHtml(text));
+  const total = STORY_SHOW_MS + STORY_HOLD_MS + STORY_FADE_MS;
+  const a = $t.animate([
+    { opacity: 0, offset: 0 },
+    { opacity: 1, offset: STORY_SHOW_MS / total },
+    { opacity: 1, offset: (STORY_SHOW_MS + STORY_HOLD_MS) / total },
+    { opacity: 0, offset: 1 },
+  ], { duration: total, easing: "ease-in-out", fill: "forwards" });
+  await a.finished;
+}
+
+async function storyBg(from, to, ms) {
+  const $s = document.getElementById("story");
+  const a = $s.animate([{ backgroundColor: `rgba(0,0,0,${from})` }, { backgroundColor: `rgba(0,0,0,${to})` }],
+    { duration: ms, easing: "ease-in-out", fill: "forwards" });
+  await a.finished;
+}
+
+// 通用黑幕文字消失演出：畫面變暗 → 依序在畫面中心浮現每句文字並漸漸增加透明度直到完全消失 → 畫面亮度回復正常
+async function playStorySequence(lines, darkness = DEFEAT_DARKNESS, restoreBrightness = true) {
+  const $s = document.getElementById("story");
+  $s.getAnimations().forEach(a => a.cancel());
+  $s.style.backgroundColor = "rgba(0,0,0,0)";
+  $s.classList.add("show");
+  await storyBg(0, darkness, 500);
+  for (const line of lines) {
+    await storyTextAnim(line);
+  }
+  if (restoreBrightness) {
+    await storyBg(darkness, 0, 500);
+    $s.classList.remove("show");
+    $s.getAnimations().forEach(a => a.cancel());
+  }
+}
+
+async function playStartText() {
+  const $s = document.getElementById("story");
+  $s.classList.add("show");
+  $s.getAnimations().forEach(a => a.cancel());
+  $s.style.backgroundColor = "rgba(0,0,0,1)";
+  await storyTextAnim(START_TEXT);
+  await storyBg(1, 0, 500);
+  $s.classList.remove("show");
+  $s.getAnimations().forEach(a => a.cancel());
+}
+
+async function playDefeatText(customLines) {
+  const $s = document.getElementById("story");
+  await sleep(DEFEAT_WAIT_MS);
+  $s.getAnimations().forEach(a => a.cancel());
+  $s.style.backgroundColor = "rgba(0,0,0,0)";
+  $s.classList.add("show");
+  await storyBg(0, DEFEAT_DARKNESS, DEFEAT_DARKEN_MS);
+  const lines = Array.isArray(customLines) && customLines.length > 0 ? customLines : [DEFEAT_TEXT];
+  for (const line of lines) {
+    await storyTextAnim(line);
+  }
+  showScreen($title, () => {
+    $s.classList.remove("show");
+    $s.getAnimations().forEach(a => a.cancel());
+  });
+}
+
+async function swordAnim() {
+  const $sword = document.getElementById("sword");
+  replayClass($sword, "show");
+  await sleep(SWORD_MS);
+  $sword.classList.remove("show");
+}
+
+async function heroHitAnim(lostHp) {
+  const $g = document.getElementById("game");
+  const $box = $dialogueStage || $log;
+  $box.classList.remove("glow-gold", "glow-red");
+  $g.classList.remove("shake");
+  if (lostHp) {
+    replayClass($box, "glow-red");
+    replayClass($g, "shake");
+  } else {
+    replayClass($box, "glow-gold");
+  }
+  await sleep(HIT_MS);
+  $box.classList.remove("glow-gold", "glow-red");
+  $g.classList.remove("shake");
+}
+
+/* =========================================================
+   1–5 層幕後事件池與爬塔流程（方案 B：營地回 60% 最大生命，殘頁篝火回 45% 最大生命）
+   ========================================================= */
+
+function buildFloorDeck(fl) {
+  const rawTypes = [...FIXED_FLOOR_CARDS, randomPick(RANDOM_FIFTH_POOL)];
+  const monsters = FLOOR_MONSTERS[fl] || FLOOR_MONSTERS[1];
+  return rawTypes.map((type, idx) => {
+    if (type === "monster") {
+      const m = weightedPick(monsters);
+      return {
+        id: `fl${fl}_card${idx}_${Math.random()}`,
+        type: "monster",
+        monster: m,
+        label: `遭遇${m.name}，迎戰`,
+      };
+    } else if (type === "camp") {
+      return {
+        id: `fl${fl}_card${idx}_${Math.random()}`,
+        type: "camp",
+        label: "在營地生火休息，回復 60% 最大生命",
+      };
+    } else {
+      return {
+        id: `fl${fl}_card${idx}_${Math.random()}`,
+        type: "skill_camp",
+        label: "在殘頁篝火旁調息，回復 45% 最大生命（暫代技能）",
+      };
+    }
+  });
+}
+
+// 從當前樓層事件池隨機抽取 count 個不重複的事件
+function drawFromDeck(deck, count) {
+  const indices = deck.map((_, i) => i);
+  for (let i = indices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [indices[i], indices[j]] = [indices[j], indices[i]];
+  }
+  return indices.slice(0, Math.min(count, deck.length)).map(i => deck[i]);
+}
+
+function newGame(selectedMode) {
+  if (selectedMode === "dice" || selectedMode === "poker") {
+    gameMode = selectedMode;
+  }
+  lastDrawnCard = null;
+  equipExpanded = false;
+  isBattleDrawerActive = false;
+  historyLogs = [];
+  if ($battleDrawer) $battleDrawer.classList.remove("open");
+  if ($battleLog) $battleLog.innerHTML = "";
+  closeHistoryModal();
+  closeTesterModal();
+
+  hero = {
+    hp: HERO_BASE.hp,
+    maxHp: HERO_BASE.hp,
+    shield: 0,
+    equip: { physWeapon: null, magWeapon: null, armor: null, shield: null, accessory: null },
+  };
+  floor = 1;
+  round = 1;
+  turn = 1;
+  enemy = null;
+  gameOver = false;
+  floorDeck = buildFloorDeck(floor);
+
+  $log.innerHTML = "";
+  const modeTitle = gameMode === "poker"
+    ? "【撲克模式】"
+    : "【骰子模式】";
+  log(`【勇者與魔王】${modeTitle}`, "big");
+  log("你踏入被文字魔王侵蝕的領域。每層共有 6 個回合，擊敗怪物穿戴文字裝備，邁向第五層的原典王座。");
+  const fInfo = getFloorInfo(floor);
+  log(`── 進入第 ${floor} 層【${fInfo.name}】：${fInfo.desc}`, "big");
+  presentRound();
+}
+
+// 顯示當前樓層與回合的選項（完全不提及牌庫／抽取庫）
+function presentRound() {
+  enemy = null;
+  renderStatus();
+  sep();
+  const fInfo = getFloorInfo(floor);
+  log(`第 ${floor} 層【${fInfo.name}】— 第 ${round} / ${ROUNDS_PER_FLOOR} 回合（總第 ${turn} 回合）。`);
+
+  // 第 6 回合：第 1–4 層為【傳送門 + 寶箱】；第 5 層為【終局魔王戰】
+  if (round === ROUNDS_PER_FLOOR) {
+    if (floor < MAX_FLOOR) {
+      log("前方浮現通往下一層的文字傳送門，門前擺放著一個散發微光的跨層寶箱。", "big");
+      setChoices([
+        {
+          label: `【傳送門 + 寶箱】開啟第 ${floor} 層跨層寶箱並前往第 ${floor + 1} 層`,
+          action: () => {
+            turn++;
+            openFloorChest();
+          },
+        },
+      ]);
+    } else {
+      log("空氣突然變得沉重……王座上的鎖鏈寸寸斷裂，文字魔王緩緩抬起頭。", "big");
+      setChoices([]);
+      bossAppearAnim().then(() => {
+        setChoices([
+          {
+            label: `【魔王】${BOSS.fullTitle}出現了，無法逃避，迎戰`,
+            action: () => {
+              turn++;
+              startBattle(BOSS);
+            },
+          },
+        ]);
+      });
+    }
+    return;
+  }
+
+  // 第 1–5 回合：二選一遭遇（第 5 回合為本層最後一段路途）
+  const drawn = drawFromDeck(floorDeck, 2);
+  if (drawn.length > 1) {
+    log("前方出現了兩條分岔的道路，請選擇你的下一步行動：");
+  } else {
+    log("前方只剩下本層的最後一段路途：");
+  }
+
+  setChoices(
+    drawn.map(card => ({
+      label: card.label,
+      action: () => selectCard(card),
+    }))
+  );
+}
+
+// 玩家選擇一個行動後執行
+function selectCard(card) {
+  const idx = floorDeck.findIndex(c => c.id === card.id);
+  if (idx !== -1) floorDeck.splice(idx, 1);
+  turn++;
+
+  if (card.type === "monster") {
+    startBattle(card.monster);
+  } else if (card.type === "camp") {
+    camp(false);
+  } else {
+    camp(true);
+  }
+}
+
+// 完成當前事件後推進到下一回合
+function advanceAfterEvent() {
+  round++;
+  presentRound();
+}
+
+/* ===== 營地回復（方案 B：營地回復 60% 最大生命，殘頁篝火回復 45% 最大生命） ===== */
+function camp(isSkillPlaceholder) {
+  const ratio = isSkillPlaceholder ? SKILL_CAMP_HEAL_RATIO : CAMP_HEAL_RATIO;
+  const healTarget = Math.max(1, Math.floor(hero.maxHp * ratio));
+  const beforeHp = hero.hp;
+  hero.hp = Math.min(hero.maxHp, hero.hp + healTarget);
+  const healed = hero.hp - beforeHp;
+  if (isSkillPlaceholder) {
+    log(`你在殘頁篝火旁靜心調息（暫代技能，回復 45% 最大生命）。生命回復 ${healed} 點，現在是 ${hero.hp} / ${hero.maxHp}。`);
+  } else {
+    log(`你在營地生火休息（回復 60% 最大生命）。生命回復 ${healed} 點，現在是 ${hero.hp} / ${hero.maxHp}。`);
+  }
+  renderStatus();
+  setChoices([{ label: "繼續前進", action: advanceAfterEvent }]);
+}
+
+/* ===== 第 6 回合：跨層寶箱與傳送門推進（每過一層清空一般對話框） ===== */
+function openFloorChest() {
+  const pool = FLOOR_CHEST_ITEMS[floor] || FLOOR_CHEST_ITEMS[1];
+  const item = randomPick(pool);
+  log(`你打開了第 ${floor} 層的跨層寶箱，從 4 件秘寶中抽出了${SLOT_NAME[item.slot]}：${itemText(item)}！`, "big");
+  offerItem(item, enterNextFloorPortal);
+}
+
+function enterNextFloorPortal() {
+  floor++;
+  round = 1;
+  floorDeck = buildFloorDeck(floor);
+  hero.maxHp += FLOOR_HP_BONUS;
+  hero.hp = Math.min(hero.maxHp, hero.hp + FLOOR_HP_BONUS);
+  const fInfo = getFloorInfo(floor);
+
+  // 每層清空一次一般對話框（歷史紀錄仍完整保留於 historyLogs）
+  $log.innerHTML = "";
+  log(`你踏入傳送門，成功抵達第 ${floor} 層【${fInfo.name}】！`, "big");
+  log(`跨層祝福發動：勇者最大生命 +${FLOOR_HP_BONUS}，並回復 ${FLOOR_HP_BONUS} 點生命（目前生命 ${hero.hp} / ${hero.maxHp}）。`, "hit");
+  log(`── 進入第 ${floor} 層【${fInfo.name}】：${fInfo.desc}`, "big");
+  presentRound();
+}
+
+/* ===== 拾取裝備（替換同部位 + 身體文字化演繹） ===== */
+function offerItem(item, onDone) {
+  const old = hero.equip[item.slot];
+  log(`目前的${SLOT_NAME[item.slot]}：${itemText(old)}。`, "dim");
+  renderStatus();
+  setChoices([
+    {
+      label: old ? `拾取 ${item.name}（替換掉 ${old.name}）` : `拾取 ${item.name}`,
+      action: () => {
+        hero.equip[item.slot] = item;
+        log(`你裝備了 ${itemText(item)}。`);
+        if (item.textDesc) {
+          log(`「${item.textDesc}」`, "text-curse");
+        } else {
+          log(`「${SLOT_NAME[item.slot]}部位變爲文字了.....但是獲得了更強的力量。」`, "text-curse");
+        }
+        renderStatus();
+        onDone();
+      },
+    },
+    {
+      label: "不要，保留現有裝備",
+      action: () => {
+        log(`你放棄了 ${item.name}。`);
+        onDone();
+      },
+    },
+  ]);
+}
+
+/* =========================================================
+   戰鬥系統（拉簾戰鬥對話框、無前綴雙行戰報、極簡上下按鈕）
+   ========================================================= */
+
+// 更新渾沌怪與一階段魔王每回合動態排斥弱點（一般渾沌怪防禦減半 ×0.5；一階段魔王防禦減免 30% 即 ×0.7）
+function refreshChaosWeakness(announce) {
+  if (!enemy || enemy.type !== "chaos" || enemy.isPhase2Boss) return;
+  enemy.weakness = Math.random() < 0.5 ? "phys" : "mag";
+  const mult = enemy.isBoss ? BOSS_WEAKNESS_MULT : 0.5;
+  const descWord = enemy.isBoss ? "降低 30%" : "減半";
+  if (enemy.weakness === "phys") {
+    enemy.curPhysDef = Math.floor(enemy.physDef * mult);
+    enemy.curMagDef = enemy.magDef;
+    if (announce) {
+      log(`【破綻】${enemy.name}體內的文字結構劇烈排斥，本回合「物理防禦」${descWord}（${enemy.physDef} → ${enemy.curPhysDef}）！`, "hit");
+    }
+  } else {
+    enemy.curPhysDef = enemy.physDef;
+    enemy.curMagDef = Math.floor(enemy.magDef * mult);
+    if (announce) {
+      log(`【破綻】${enemy.name}體內的文字結構劇烈排斥，本回合「魔法防禦」${descWord}（${enemy.magDef} → ${enemy.curMagDef}）！`, "hit");
+    }
+  }
+}
+
+// 第 4 部分：採用方案 B 極簡單行文字，並維持上下堆疊模式（預留未來局內技能空間）
+function showCombatButtons() {
+  if (!enemy || hero.hp <= 0) return;
+  const wPhys = hero.equip.physWeapon ? hero.equip.physWeapon.name : "徒手";
+  const wMag = hero.equip.magWeapon ? hero.equip.magWeapon.name : "基礎魔力";
+  const hasSwordMult = (hero.equip.accessory && hero.equip.accessory.isHeroSword && hero.equip.accessory.atkMult > 1);
+  const swordTag = hasSwordMult ? `［勇者之劍×${hero.equip.accessory.atkMult}］` : "";
+  setChoices([
+    {
+      label: `【物理攻擊】使用${wPhys}${swordTag}`,
+      action: () => heroAttack("phys"),
+    },
+    {
+      label: `【魔法攻擊】使用${wMag}${swordTag}`,
+      action: () => heroAttack("mag"),
+    },
+  ]);
+}
+
+async function startBattle(template) {
+  if (template.isPhase2Boss) {
+    // 二階段（方案 B）：HP 135，1:1 鏡像複製勇者（排除勇者之劍與測試者 999 裝備），前半血處於【亂碼侵蝕】（攻擊×1.05／吸血+2）
+    const mirror = calcMirrorStatsForPhase2(HERO_BASE, hero.equip);
+    const baseMirrorPhysAtk = mirror.physAtk + PHASE2_BOSS_BONUS_ATK;
+    const baseMirrorMagAtk = mirror.magAtk + PHASE2_BOSS_BONUS_ATK;
+    const baseMirrorPhysDef = mirror.physDef + PHASE2_BOSS_BONUS_DEF;
+    const baseMirrorMagDef = mirror.magDef + PHASE2_BOSS_BONUS_DEF;
+    enemy = {
+      name: template.name,
+      trueName: template.trueName,
+      type: "chaos",
+      typeLabel: template.typeLabel || PHASE2_BOSS_HIDDEN_NAME,
+      isBoss: false,
+      isPhase2Boss: true,
+      hp: template.hp,
+      maxHp: template.hp,
+      baseMirrorPhysAtk,
+      baseMirrorMagAtk,
+      physAtk: Math.floor(baseMirrorPhysAtk * PHASE2_BOSS_INIT_MULT),
+      magAtk: Math.floor(baseMirrorMagAtk * PHASE2_BOSS_INIT_MULT),
+      physDef: baseMirrorPhysDef,
+      magDef: baseMirrorMagDef,
+      curPhysDef: baseMirrorPhysDef,
+      curMagDef: baseMirrorMagDef,
+      shield: mirror.shield,
+      maxShield: mirror.shield,
+      weakness: null,
+      halfHpTriggered: false,
+      firstAttackDone: false,
+      inRage: false,
+      items: [],
+    };
+  } else {
+    const equip = { physWeapon: null, magWeapon: null, armor: null, shield: null };
+    template.items.forEach(it => { equip[it.slot] = it; });
+    const baseSt = template.baseStats || { physAtk: 0, magAtk: 0, physDef: 0, magDef: 0, shield: 0 };
+    const st = calcStats(baseSt, equip, false);
+
+    enemy = {
+      name: template.name,
+      type: template.type || "phys",
+      typeLabel: template.typeLabel || "怪物",
+      isBoss: !!template.isBoss,
+      isPhase2Boss: false,
+      hp: template.hp,
+      maxHp: template.hp,
+      physAtk: st.physAtk,
+      magAtk: st.magAtk,
+      physDef: st.physDef,
+      magDef: st.magDef,
+      curPhysDef: st.physDef,
+      curMagDef: st.magDef,
+      shield: st.shield,
+      maxShield: st.shield,
+      weakness: null,
+      halfHpTriggered: false,
+      items: template.items,
+    };
+  }
+
+  // 護盾每場戰鬥開始時刷新
+  hero.shield = calcStats(HERO_BASE, hero.equip, true).shield;
+  setChoices([]);
+  renderStatus();
+
+  // 於歷史對話中加入粗體標題「與XXX的戰鬥」
+  historyLogs.push({
+    kind: "battle_header",
+    title: `與 ${enemy.name} 的戰鬥`,
+  });
+
+  // 播放「戰鬥開始了！！！」漸隱動畫，並從對話框頂部拉下專屬戰鬥對話框
+  await openBattleDrawerAnim(enemy.name);
+
+  log(`對手是${enemy.name}！`, "big");
+
+  if (enemy.isBoss) {
+    log("魔王的力量有點奇怪，似乎不屬於這裏……", "text-curse");
+  } else if (enemy.isPhase2Boss) {
+    log(`【精神世界】${enemy.name}完全複製了你身上的文字裝備與基礎能力（不包含飾品【勇者之劍】），並發動【亂碼侵蝕】（攻擊×${PHASE2_BOSS_INIT_MULT}／命中吸取 ${PHASE2_BOSS_LIFESTEAL} 點生命）！`, "text-curse");
+  }
+
+  if (enemy.type === "chaos" && !enemy.isPhase2Boss) {
+    refreshChaosWeakness(true);
+  }
+  renderStatus();
+
+  // 決定先攻：單數勇者先、雙數對手先（依模式使用 0–20 擲骰或 A–K 抽撲克牌）
+  let r;
+  if (gameMode === "poker") {
+    const card = drawPokerCard();
+    lastDrawnCard = card;
+    r = card.value;
+    await rollPokerAnim("先攻判定", null, card, "單數(A,3,5,7,9,J,K)＝勇者先攻／雙數＝" + enemy.name + "先攻");
+    if (r % 2 === 1) {
+      log(`先攻抽牌：${card.fullLabel}（代表點數 ${r}，單數），勇者先攻。`);
+    } else {
+      log(`先攻抽牌：${card.fullLabel}（代表點數 ${r}，雙數），${enemy.name}先攻。`);
+      await enemyAttack();
+      if (!enemy || hero.hp <= 0) return;
+    }
+  } else {
+    r = rollD20();
+    await rollDiceAnim("先攻判定", null, r, "單數＝勇者先攻／雙數＝" + enemy.name + "先攻");
+    if (r % 2 === 1) {
+      log(`先攻骰：${r}（單數），勇者先攻。`);
+    } else {
+      log(`先攻骰：${r}（雙數），${enemy.name}先攻。`);
+      await enemyAttack();
+      if (!enemy || hero.hp <= 0) return;
+    }
+  }
+  renderStatus();
+  showCombatButtons();
+}
+
+// 計算並套用傷害（方案 B：骰子 0 失手、20 無視 50% 防禦＋無視護盾；撲克黑紅花色臨時+3、K 無視護盾、A 無視 50% 防禦＋無視護盾）
+function dealDamage(attackerName, atkType, atk, def, target, dice, cardInfo) {
+  const atkLabel = atkType === "mag" ? "魔法攻擊" : "物理攻擊";
+  const defLabel = atkType === "mag" ? "魔防" : "物防";
+
+  // 1. 骰子模式（cardInfo 為 null）
+  if (!cardInfo) {
+    if (dice === 0) {
+      const mainLine = `${attackerName}發動【${atkLabel}】 ➔ 骰出 0 點失手，造成 0 點傷害！`;
+      const formulaLine = `骰子 0（失手） = 0 傷害`;
+      return { mainLine, formulaLine, dmg: 0, toShield: 0, toHp: 0 };
+    }
+    const isCrit20 = (dice === 20);
+    const ignoreShield = (dice >= DICE_PIERCE_SHIELD_MIN);
+    const effDef = isCrit20 ? Math.floor(def * DICE_CRIT_DEF_MULT) : def;
+    const dmg = Math.max(0, atk + dice - effDef);
+    const toShield = ignoreShield ? 0 : Math.min(target.shield, dmg);
+    const toHp = dmg - toShield;
+    target.shield -= toShield;
+    target.hp -= toHp;
+
+    let specialTag = "";
+    if (isCrit20) {
+      specialTag = "［骰出20：無視50%防禦＋無視護盾］";
+    } else if (ignoreShield) {
+      specialTag = `［骰出${dice}：無視護盾］`;
+    }
+
+    let mainLine = `${attackerName}發動【${atkLabel}】${specialTag} ➔ 造成 ${dmg} 點傷害！`;
+    if (dmg > 0) {
+      const parts = [];
+      if (toShield > 0) parts.push(`護盾 −${toShield}`);
+      if (toHp > 0) parts.push(`生命 −${toHp}`);
+      mainLine += `（${parts.join("，")}）`;
+    }
+    const rollExpr = ignoreShield ? `骰子 ${dice}（穿盾）` : `骰子 ${dice}`;
+    const defExpr = isCrit20 ? `${defLabel} ${effDef}（原 ${def} 減半）` : `${defLabel} ${def}`;
+    const formulaLine = `${atk} + ${rollExpr} − ${defExpr} = ${dmg} 傷害`;
+    return { mainLine, formulaLine, dmg, toShield, toHp };
+  }
+
+  // 2. 撲克模式（方案 B：無失手；黑色花色物攻臨時+3、紅色花色魔攻臨時+3；K 無視護盾；A 無視50%防禦＋無視護盾）
+  const isBlackSuit = (cardInfo.suit.key === "S" || cardInfo.suit.key === "C");
+  const suitMatched = (atkType === "phys" && isBlackSuit) || (atkType === "mag" && !isBlackSuit);
+  const suitBonus = suitMatched ? POKER_SUIT_ATK_BONUS : 0;
+  const effAtk = atk + suitBonus;
+
+  const isAce = (cardInfo.rank === "A");
+  const isKing = (dice === POKER_KING_PIERCE_VAL);
+  const ignoreShield = (isAce || isKing);
+  const effDef = isAce ? Math.floor(def * POKER_ACE_DEF_MULT) : def;
+
+  const dmg = Math.max(0, effAtk + dice - effDef);
+  const toShield = ignoreShield ? 0 : Math.min(target.shield, dmg);
+  const toHp = dmg - toShield;
+  target.shield -= toShield;
+  target.hp -= toHp;
+
+  const tags = [];
+  if (suitBonus > 0) {
+    tags.push(`${isBlackSuit ? "黑花色物攻" : "紅花色魔攻"}+${suitBonus}`);
+  }
+  if (isAce) {
+    tags.push("王牌A：無視50%防禦＋無視護盾");
+  } else if (isKing) {
+    tags.push("老K：無視護盾");
+  }
+  const tagStr = tags.length > 0 ? `［${tags.join("｜")}］` : "";
+
+  let mainLine = `${attackerName}發動【${atkLabel}】${tagStr} ➔ 造成 ${dmg} 點傷害！`;
+  if (dmg > 0) {
+    const parts = [];
+    if (toShield > 0) parts.push(`護盾 −${toShield}`);
+    if (toHp > 0) parts.push(`生命 −${toHp}`);
+    mainLine += `（${parts.join("，")}）`;
+  }
+
+  const atkExpr = suitBonus > 0 ? `${effAtk}（${atk}+花色${suitBonus}）` : `${atk}`;
+  const rollExpr = ignoreShield
+    ? `撲克 ${dice}（${cardInfo.label} 穿盾）`
+    : `撲克 ${dice}（${cardInfo.label}）`;
+  const defExpr = isAce ? `${defLabel} ${effDef}（原 ${def} 減半）` : `${defLabel} ${def}`;
+  const formulaLine = `${atkExpr} + ${rollExpr} − ${defExpr} = ${dmg} 傷害`;
+  return { mainLine, formulaLine, dmg, toShield, toHp };
+}
+
+async function heroAttack(atkType) {
+  setChoices([]); // 動畫期間鎖定按鈕
+  const s = calcStats(HERO_BASE, hero.equip, true);
+  const isMag = atkType === "mag";
+  const atkVal = isMag ? s.magAtk : s.physAtk;
+  const defVal = isMag ? enemy.curMagDef : enemy.curPhysDef;
+  const rollWord = gameMode === "poker" ? "撲克" : "骰子";
+  const labelNote = isMag
+    ? `魔攻 ${atkVal} + ${rollWord} − 魔防 ${defVal}`
+    : `物攻 ${atkVal} + ${rollWord} − 物防 ${defVal}`;
+
+  let dice, drawnCard = null;
+  if (gameMode === "poker") {
+    drawnCard = drawPokerCard();
+    lastDrawnCard = drawnCard;
+    dice = drawnCard.value;
+    await rollPokerAnim("勇者", HERO_COLOR, drawnCard, labelNote);
+  } else {
+    dice = rollD20();
+    await rollDiceAnim("勇者", HERO_COLOR, dice, labelNote);
+  }
+  await swordAnim();
+
+  const heroTarget = { shield: enemy.shield, hp: enemy.hp };
+  const report = dealDamage("勇者", atkType, atkVal, defVal, heroTarget, dice, drawnCard);
+  logCombatReport(true, report.mainLine, report.formulaLine);
+  enemy.shield = heroTarget.shield;
+  enemy.hp = heroTarget.hp;
+  renderStatus();
+
+  // 二階段：勇者第一次攻擊後的專屬台詞（半血前 enemy.name 為 @$+%^&¥，完全不出現真魔王或沙坦）
+  if (enemy.isPhase2Boss && !enemy.firstAttackDone) {
+    enemy.firstAttackDone = true;
+    log(`${enemy.name}：「啊啊你爲甚麼會有前勇者的武器，這個混蛋竟然死後也不安寧！！！」`, "text-curse");
+  }
+
+  if (enemy.hp <= 0) { await winBattle(); return; }
+
+  // 一階段魔王半血掙扎加劇提示（完全不顯示任何有關前勇者的部分，只顯示「魔王突然劇烈掙扎」）
+  if (enemy.isBoss && !enemy.halfHpTriggered && enemy.hp <= enemy.maxHp * BOSS_STRUGGLE_HP_RATIO) {
+    enemy.halfHpTriggered = true;
+    log(BOSS_STRUGGLE_TEXT, "text-curse");
+  }
+
+  // 二階段半血（HP <= 67）顯露真名「文字.沙坦」並進入狂暴狀態（雙攻提升為 ×1.35 ＋ 立即重鑄 10 點原典黑盾）
+  if (enemy.isPhase2Boss && !enemy.halfHpTriggered && enemy.hp <= enemy.maxHp * PHASE2_BOSS_RAGE_HP_RATIO) {
+    enemy.halfHpTriggered = true;
+    const oldHiddenName = enemy.name;
+    enemy.name = enemy.trueName || PHASE2_BOSS_TRUE_NAME;
+    enemy.typeLabel = "真魔王";
+    enemy.inRage = true;
+    enemy.physAtk = Math.floor(enemy.baseMirrorPhysAtk * PHASE2_BOSS_RAGE_MULT);
+    enemy.magAtk = Math.floor(enemy.baseMirrorMagAtk * PHASE2_BOSS_RAGE_MULT);
+    enemy.shield += PHASE2_BOSS_RAGE_SHIELD;
+    enemy.maxShield = Math.max(enemy.maxShield, enemy.shield);
+    if ($battleDrawerTitle) {
+      $battleDrawerTitle.innerHTML = colorize(`與 ${escapeHtml(enemy.name)} 的戰鬥`);
+    }
+    log(`【真名顯露】隨着重創，${oldHiddenName}身上的亂碼屏障碎裂，露出了它的真名——「${enemy.name}」！`, "big");
+    log(`勇者：「原來魔王的名字叫${enemy.name}….」`, "hit");
+    log(`${enemy.name}：「竟然被你看見了...那麼你就非死不可了！！」`, "text-curse");
+    log(`【狂暴】${enemy.name}進入狂暴狀態！物理與魔法攻擊力提升為 ${PHASE2_BOSS_RAGE_MULT} 倍（物攻 ${enemy.physAtk}／魔攻 ${enemy.magAtk}），並重鑄了 ${PHASE2_BOSS_RAGE_SHIELD} 點原典黑盾！`, "text-curse");
+    renderStatus();
+  }
+
+  await enemyAttack();
+  if (!enemy || hero.hp <= 0) return;
+
+  // 渾沌怪與一階段魔王每回合結束後動態切換排斥弱點（二階段不減防）
+  if (enemy.type === "chaos" && !enemy.isPhase2Boss) {
+    refreshChaosWeakness(true);
+  }
+  renderStatus();
+  showCombatButtons();
+}
+
+async function enemyAttack() {
+  // 一階段魔王掙扎判定（初期 15%，半血以下 30%）：
+  // 嚴格不顯示任何有關前勇者的部分，只顯示「魔王突然劇烈掙扎」➔ 50%「魔王揮空並且傷到了自己」／ 50%「魔王暴走！！！」
+  let berserkBonus = 0;
+  if (enemy.isBoss) {
+    const struggleChance = (enemy.hp <= enemy.maxHp * BOSS_STRUGGLE_HP_RATIO)
+      ? BOSS_STRUGGLE_CHANCE_LOW_HP
+      : BOSS_STRUGGLE_CHANCE_BASE;
+    if (Math.random() < struggleChance) {
+      log(BOSS_STRUGGLE_TEXT, "text-curse");
+      if (Math.random() < 0.5) {
+        enemy.hp = Math.max(0, enemy.hp - BOSS_STRUGGLE_SELF_DMG);
+        log(BOSS_STRUGGLE_SELF_HIT_TEXT, "text-curse");
+        renderStatus();
+        await sleep(HIT_MS);
+        if (enemy.hp <= 0) await winBattle();
+        return;
+      } else {
+        berserkBonus = BOSS_STRUGGLE_BERSERK_ATK;
+        log(BOSS_STRUGGLE_BERSERK_TEXT, "text-curse");
+      }
+    }
+  }
+
+  const s = calcStats(HERO_BASE, hero.equip, true);
+  let atkType = "phys";
+  if (enemy.type === "mag") {
+    atkType = "mag";
+  } else if (enemy.type === "chaos") {
+    atkType = Math.random() < 0.5 ? "phys" : "mag";
+  }
+
+  const isMag = atkType === "mag";
+  const atkVal = (isMag ? enemy.magAtk : enemy.physAtk) + berserkBonus;
+  const defVal = isMag ? s.magDef : s.physDef;
+  const rollWord = gameMode === "poker" ? "撲克" : "骰子";
+  const labelNote = isMag
+    ? `魔法攻擊 ${atkVal} + ${rollWord} − 勇者魔防 ${defVal}`
+    : `物理攻擊 ${atkVal} + ${rollWord} − 勇者物防 ${defVal}`;
+
+  let dice, drawnCard = null;
+  if (gameMode === "poker") {
+    drawnCard = drawPokerCard();
+    lastDrawnCard = drawnCard;
+    dice = drawnCard.value;
+    await rollPokerAnim(enemy.name, ENEMY_COLORS[enemy.name], drawnCard, labelNote);
+  } else {
+    dice = rollD20();
+    await rollDiceAnim(enemy.name, ENEMY_COLORS[enemy.name], dice, labelNote);
+  }
+
+  const target = { shield: hero.shield, hp: hero.hp };
+  const hpBefore = hero.hp;
+  const report = dealDamage(enemy.name, atkType, atkVal, defVal, target, dice, drawnCard);
+
+  // 檢查是否觸發飾品【勇者之劍】殘魂免疫致命傷（方案 B：最多 2 次，鎖 1 血並重鑄滿額護盾，每次倍率下降 0.15）
+  const acc = hero.equip.accessory;
+  if (target.hp <= 0 && acc && acc.isHeroSword && acc.blocksLeft > 0) {
+    acc.blocksLeft--;
+    acc.atkMult = Math.max(1.0, Math.round((acc.atkMult - HERO_SWORD_BLOCK_DECAY) * 100) / 100);
+    hero.shield = calcStats(HERO_BASE, hero.equip, true).shield;
+    hero.hp = 1; // 保留 1 點生命（鎖 1 血並重鑄護盾）
+    logCombatReport(false, report.mainLine, report.formulaLine);
+    renderStatus();
+
+    // 觸發「受到攻擊後生命值沒有減少」的視覺特效（面板周圍閃金光）
+    await heroHitAnim(false);
+
+    // 畫面變暗並在中心顯示文字消失效果
+    if (acc.blocksLeft > 0) {
+      log(`勇者之劍裏的殘魂突然出現，爲勇者擋下了致命一擊並重鑄護盾！勇者的殘魂變弱了一分（攻擊倍率降至 ×${acc.atkMult}，勇者保留 1 點生命）。`, "hit");
+      renderStatus();
+      await playStorySequence([HERO_SWORD_BLOCK_TEXT]);
+    } else {
+      log(`勇者之劍裏的殘魂拼盡最後一份力爲勇者擋下致命一擊並重鑄護盾！勇者的殘魂消失了...（攻擊倍率降至 ×${acc.atkMult}，勇者保留 1 點生命）`, "hit");
+      log(`${enemy.name}：「（邪笑）看你還有甚麼手段抵擋我」`, "text-curse");
+      renderStatus();
+      await playStorySequence([HERO_SWORD_BLOCK_TEXT, HERO_SWORD_VANISH_TEXT]);
+    }
+    return;
+  }
+
+  logCombatReport(false, report.mainLine, report.formulaLine);
+  hero.shield = target.shield;
+  hero.hp = target.hp;
+
+  // 二階段前半血【亂碼侵蝕】吸血機制：若本次攻擊對勇者造成實際生命傷害且勇者尚未倒下，吸取 2 點生命
+  if (enemy && enemy.isPhase2Boss && !enemy.inRage && report.toHp > 0 && hero.hp > 0) {
+    const beforeEnemyHp = enemy.hp;
+    enemy.hp = Math.min(enemy.maxHp, enemy.hp + PHASE2_BOSS_LIFESTEAL);
+    const healedEnemy = enemy.hp - beforeEnemyHp;
+    if (healedEnemy > 0) {
+      log(`【亂碼侵蝕】${enemy.name}吞噬了飛濺的血肉文字，回復 ${healedEnemy} 點生命（目前生命 ${enemy.hp} / ${enemy.maxHp}）！`, "text-curse");
+    }
+  }
+
+  renderStatus();
+
+  await heroHitAnim(hero.hp < hpBefore);
+  if (hero.hp <= 0) loseGame();
+}
+
+async function winBattle() {
+  setChoices([]);
+  // 先播放「從底部收回戰鬥對話框」動畫，使後續劇情與掉寶回到外層一般對話框
+  await closeBattleDrawerAnim();
+
+  // 一階段魔王被擊敗：此時勇者才發現魔王的真實身分是「前勇者」！
+  if (enemy.isBoss) {
+    enemy = null;
+    renderStatus();
+
+    // 隱藏彩蛋：全程未穿戴任何文字裝備（完全徒手／初始狀態）
+    if (isCompletelyUnarmed()) {
+      log("【隱藏彩蛋】你全程沒有借助任何文字裝備的力量，以純粹的血肉之軀擊倒了文字魔王，揭開了他是前勇者的真相！", "big");
+      for (const line of UNARMED_EGG_TEXTS) {
+        log(line, "hit");
+      }
+      await playStorySequence(UNARMED_EGG_TEXTS);
+      log("【特殊完勝結局：純粹血肉之奇蹟】你連精神世界的心魔都無從誕生，徹底粉碎了文字魔王的詛咒！", "big");
+      setChoices([
+        { label: "再玩一次", action: showReplayModeChoices },
+        { label: "返回標題畫面", action: goTitle },
+      ]);
+      return;
+    }
+
+    // 正常路線：文字魔王倒下後，勇者發現其身分為「前勇者」，獲得【勇者之劍】（方案 B：回復 80% 最大生命、初始 ×1.45 攻擊、2 次殘魂擋死）
+    const swordItem = { ...HERO_SWORD_ITEM };
+    hero.equip.accessory = swordItem;
+    const healGain = Math.max(1, Math.floor(hero.maxHp * HERO_SWORD_HEAL_RATIO));
+    const beforeHp = hero.hp;
+    hero.hp = Math.min(hero.maxHp, hero.hp + healGain);
+    const actualHealed = hero.hp - beforeHp;
+    sep();
+    log("文字魔王倒下了……他身上的文字枷鎖出現裂痕，露出了底下的真容——竟然是前勇者！", "big");
+    log(`你獲得了前勇者的遺物飾品：【${swordItem.name}】（${swordItem.desc}）！勇者生命回復 ${actualHealed} 點（目前生命 ${hero.hp} / ${hero.maxHp}）！`, "hit");
+    for (const line of PHASE1_CLEAR_TEXTS) {
+      log(line, "text-curse");
+    }
+    renderStatus();
+
+    await playStorySequence(PHASE1_CLEAR_TEXTS);
+
+    sep();
+    log(`── 意識墜入精神世界，${PHASE2_BOSS_HIDDEN_NAME}降臨！`, "big");
+    await bossAppearAnim();
+    await startBattle(PHASE2_BOSS);
+    return;
+  }
+
+  // 二階段（文字.沙坦）被擊敗：演出 4 句勝利結局文字消失動畫
+  if (enemy.isPhase2Boss) {
+    enemy = null;
+    renderStatus();
+    sep();
+    for (const line of PHASE2_VICTORY_TEXTS) {
+      log(line, "big");
+    }
+    await playStorySequence(PHASE2_VICTORY_TEXTS);
+    log(`【勝利結局：血肉重鑄】你成功擊潰真魔王「${PHASE2_BOSS_TRUE_NAME}」，奪回血肉之身並拯救了村落！`, "big");
+    setChoices([
+      { label: "再玩一次", action: showReplayModeChoices },
+      { label: "返回標題畫面", action: goTitle },
+    ]);
+    return;
+  }
+
+  const defeatedEnemy = enemy;
+  enemy = null;
+  renderStatus();
+
+  log(`你打倒了${defeatedEnemy.name}！`, "big");
+  const drop = randomPick(defeatedEnemy.items);
+  log(`${defeatedEnemy.name}掉落了一件${SLOT_NAME[drop.slot]}：${itemText(drop)}。`);
+  offerItem(drop, advanceAfterEvent);
+}
+
+function loseGame() {
+  gameOver = true;
+  hero.hp = 0;
+  const wasPhase2 = enemy && enemy.isPhase2Boss;
+  const killerName = enemy ? enemy.name : "魔王";
+  log(`勇者倒下了……被${killerName}擊敗，意識逐漸被冰冷的文字吞噬。`, "big");
+  if (wasPhase2) {
+    log("【敗北結局：文字魔王】你的意識被徹底吞噬，肉身化為冰冷文字，成為王座上靜候下一位挑戰者的新任文字魔王……", "text-curse");
+  } else {
+    log(`【遊戲結束】止步於第 ${floor} 層第 ${round} 回合。`, "big");
+  }
+  enemy = null;
+  renderStatus();
+  setChoices([]);
+  playDefeatText(wasPhase2 ? PHASE2_DEFEAT_TEXTS : [DEFEAT_TEXT]);
+}
+
+/* =========================================================
+   標題畫面、介紹畫面與轉場
+   ========================================================= */
+const $title = document.getElementById("title-screen");
+const $intro = document.getElementById("intro-screen");
+const $game = document.getElementById("game");
+const $fade = document.getElementById("fade");
+let transitioning = false;
+
+document.documentElement.style.setProperty("--fade-ms", FADE_MS + "ms");
+document.documentElement.style.setProperty("--sword-ms", SWORD_MS + "ms");
+document.documentElement.style.setProperty("--boss-ms", BOSS_APPEAR_MS + "ms");
+document.documentElement.style.setProperty("--boss-from", BOSS_SCALE_FROM);
+document.documentElement.style.setProperty("--boss-to", BOSS_SCALE_TO);
+document.documentElement.style.setProperty("--hit-ms", HIT_MS + "ms");
+document.documentElement.style.setProperty("--gold", GOLD_GLOW);
+document.documentElement.style.setProperty("--red", RED_GLOW);
+document.documentElement.style.setProperty("--scan-ms", SCAN_MS + "ms");
+document.documentElement.style.setProperty("--battle-intro-ms", BATTLE_INTRO_MS + "ms");
+document.documentElement.style.setProperty("--battle-drawer-ms", BATTLE_DRAWER_MS + "ms");
+document.getElementById("title-logo").textContent = TITLE_TEXT;
+document.getElementById("title-sub").textContent = TITLE_SUB;
+document.getElementById("intro-box").innerHTML = colorize(
+  "<h2>【遊戲背景】</h2>" + INTRO_STORY.map(t => `<p>${t}</p>`).join("") +
+  "<h2>【基本玩法】</h2><ul>" + INTRO_RULES.map(t => `<li>${t}</li>`).join("") + "</ul>"
+);
+
+function showScreen(target, beforeShow) {
+  if (transitioning) return;
+  transitioning = true;
+  $fade.classList.add("on");
+  setTimeout(() => {
+    [$title, $intro, $game].forEach(el => el.classList.add("hidden"));
+    if (beforeShow) beforeShow();
+    target.classList.remove("hidden");
+    target.classList.remove("enter");
+    void target.offsetWidth;
+    target.classList.add("enter");
+    $fade.classList.remove("on");
+    setTimeout(() => { transitioning = false; }, FADE_MS);
+  }, Math.max(FADE_MS, SCAN_MS));
+}
+
+const $titleMainMenu = document.getElementById("title-main-menu");
+const $titleModeMenu = document.getElementById("title-mode-menu");
+
+function resetTitleMenu() {
+  if ($titleMainMenu && $titleModeMenu) {
+    $titleMainMenu.classList.remove("hidden");
+    $titleModeMenu.classList.add("hidden");
+  }
+}
+
+function openTitleModeSelect() {
+  if ($titleMainMenu && $titleModeMenu) {
+    $titleMainMenu.classList.add("hidden");
+    $titleModeMenu.classList.remove("hidden");
+  }
+}
+
+// 通關後按下「再玩一次」時，顯示兩個模式按鈕供玩家選擇
+function showReplayModeChoices() {
+  log(MODE_PROMPT_TEXT, "big");
+  setChoices([
+    { label: MODE_DICE_BTN_TEXT, action: () => { newGame("dice"); playStartText(); } },
+    { label: MODE_POKER_BTN_TEXT, action: () => { newGame("poker"); playStartText(); } },
+    { label: "返回標題畫面", action: goTitle },
+  ]);
+}
+
+function goTitle() { showScreen($title, resetTitleMenu); }
+function goIntro() { showScreen($intro, () => { document.getElementById("intro-box").scrollTop = 0; }); }
+function goGameWithMode(selectedMode) {
+  showScreen($game, () => {
+    resetTitleMenu();
+    newGame(selectedMode);
+    playStartText();
+  });
+}
+
+// 標題畫面按下「開始遊戲」：展開【骰子模式】與【撲克模式】兩個按鈕
+document.getElementById("btn-start").onclick = openTitleModeSelect;
+document.getElementById("btn-mode-dice").onclick = () => goGameWithMode("dice");
+document.getElementById("btn-mode-poker").onclick = () => goGameWithMode("poker");
+document.getElementById("btn-mode-back").onclick = resetTitleMenu;
+
+document.getElementById("btn-intro").onclick = goIntro;
+document.getElementById("btn-back").onclick = goTitle;
+// 介紹畫面按下「開始遊戲」：切換回標題畫面並直接展開雙模式選擇按鈕
+document.getElementById("btn-intro-start").onclick = () => showScreen($title, openTitleModeSelect);
+
+</script>
+</body>
+</html>
