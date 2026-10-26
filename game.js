@@ -1,12 +1,14 @@
 /* =========================================================
-   遊戲核心狀態與邏輯 (game.js - 第六版 v6)
+   遊戲核心狀態與邏輯 (game.js - 第六版 v6 雙模式與終局魔王平衡更新)
    包含：1–5 層 6 回合爬塔、物/魔雙攻防、可收合 5 格裝備抽屜、
    勇者與敵人生命/護盾雙動態條與外框微光、頂部拉下／底部收回戰鬥對話框、
-   無前綴雙行戰報、歷史對話視窗、雙模式（骰子／撲克）、二階段真魔王心魔戰
+   無前綴雙行戰報、歷史對話視窗、雙模式（骰子／撲克）專屬穿盾與花色機制、
+   一階段魔王掙扎／暴走（擊敗前保密前勇者身分）、勇者之劍殘魂燃燒、
+   二階段心魔戰（半血前保密真名只顯示 @$+%^&¥，半血後顯露真名文字.沙坦）
    ========================================================= */
 let hero, floor, round, turn, floorDeck, enemy, gameOver;
-let gameMode = "dice"; // "dice" (舊版 0–20 骰子模式) 或 "poker" (新版 1–13 撲克模式)
-let lastDrawnCard = null; // 紀錄最近一次抽出的撲克牌資訊（供後續飾品與技能花色連動）
+let gameMode = "dice"; // "dice" (0–20 骰子模式) 或 "poker" (1–13 撲克模式)
+let lastDrawnCard = null; // 紀錄最近一次抽出的撲克牌資訊
 let equipExpanded = false; // 頂部裝備抽屜展開狀態
 let isBattleDrawerActive = false; // 是否正在拉下的戰鬥對話框中輸出
 let historyLogs = []; // 歷史對話紀錄（包含一般對話、戰鬥標題、戰鬥對話與雙行戰報）
@@ -134,7 +136,8 @@ function itemText(item) {
   if (item.slot === "accessory") {
     if (item.isHeroSword) {
       const blocks = item.blocksLeft > 0 ? `殘魂擋死剩餘 ${item.blocksLeft} 次` : "殘魂已消逝";
-      return `${item.name}（攻擊×${item.atkMult}／${blocks}）`;
+      const multStr = item.atkMult > 1 ? `攻擊×${item.atkMult}／` : "攻擊加成已消逝／";
+      return `${item.name}（${multStr}${blocks}）`;
     }
     return item.desc ? `${item.name}（${item.desc}）` : item.name;
   }
@@ -142,7 +145,7 @@ function itemText(item) {
 }
 
 // 從基礎數值與裝備計算實際雙攻、雙防與護盾
-// 註：allowAccessory = true 時計算飾品【勇者之劍】的未計算前攻擊力 ×1.5 加成；二階段真魔王複製時設為 false
+// 註：allowAccessory = true 時計算飾品【勇者之劍】的未計算前攻擊力倍率加成；二階段複製時設為 false
 function calcStats(base, equip, allowAccessory = true) {
   let physAtk = (base.physAtk || 0) + (equip.physWeapon ? equip.physWeapon.physAtk : 0);
   let magAtk = (base.magAtk || 0) + (equip.magWeapon ? equip.magWeapon.magAtk : 0);
@@ -150,7 +153,7 @@ function calcStats(base, equip, allowAccessory = true) {
   const magDef = (base.magDef || 0) + (equip.armor ? equip.armor.magDef : 0);
   const shield = (base.shield || 0) + (equip.shield ? equip.shield.shield : 0);
 
-  if (allowAccessory && equip.accessory && equip.accessory.atkMult) {
+  if (allowAccessory && equip.accessory && equip.accessory.atkMult && equip.accessory.atkMult > 1) {
     physAtk = Math.floor(physAtk * equip.accessory.atkMult);
     magAtk = Math.floor(magAtk * equip.accessory.atkMult);
   }
@@ -343,9 +346,16 @@ function renderStatus() {
     $enemyPanel.style.setProperty("--enemy-glow-soft", hexToRgba(eColor, 0.42));
     $enemyPanel.style.setProperty("--enemy-glow-inset", hexToRgba(eColor, 0.14));
 
-    const weakNote = enemy.weakness === "phys"
-      ? "［破綻：物防減半］"
-      : (enemy.weakness === "mag" ? "［破綻：魔防減半］" : (enemy.inRage ? "［狂暴：攻擊×1.5］" : ""));
+    let weakNote = "";
+    if (enemy.weakness === "phys") {
+      weakNote = enemy.isBoss ? "［破綻：物防−30%］" : "［破綻：物防減半］";
+    } else if (enemy.weakness === "mag") {
+      weakNote = enemy.isBoss ? "［破綻：魔防−30%］" : "［破綻：魔防減半］";
+    } else if (enemy.isPhase2Boss) {
+      weakNote = enemy.inRage
+        ? `［真名狂暴：攻擊×${PHASE2_BOSS_RAGE_MULT}］`
+        : `［亂碼侵蝕：攻擊×${PHASE2_BOSS_INIT_MULT}／吸血+${PHASE2_BOSS_LIFESTEAL}］`;
+    }
 
     const eHpCur = Math.max(0, enemy.hp);
     const eHpPct = enemy.maxHp > 0 ? Math.max(0, Math.min(100, (eHpCur / enemy.maxHp) * 100)) : 0;
@@ -613,7 +623,7 @@ async function heroHitAnim(lostHp) {
    1–5 層幕後事件池與爬塔流程（已全面隱藏牌庫顯示與相關對白）
    ========================================================= */
 
-// 建立單層的 5 個幕後遭遇事件（對玩家隱藏牌庫概念，保留「（暫代技能）」字樣）
+// 建立單層的 5 個幕後遭遇事件（營地回復 50% 最大生命，殘頁篝火回復 35% 最大生命）
 function buildFloorDeck(fl) {
   const rawTypes = [...FIXED_FLOOR_CARDS, randomPick(RANDOM_FIFTH_POOL)];
   const monsters = FLOOR_MONSTERS[fl] || FLOOR_MONSTERS[1];
@@ -630,13 +640,13 @@ function buildFloorDeck(fl) {
       return {
         id: `fl${fl}_card${idx}_${Math.random()}`,
         type: "camp",
-        label: "在營地生火休息，生命回滿",
+        label: "在營地生火休息，回復 50% 最大生命",
       };
     } else {
       return {
         id: `fl${fl}_card${idx}_${Math.random()}`,
         type: "skill_camp",
-        label: "在殘頁篝火旁調息，生命回滿（暫代技能）",
+        label: "在殘頁篝火旁調息，回復 35% 最大生命（暫代技能）",
       };
     }
   });
@@ -764,14 +774,17 @@ function advanceAfterEvent() {
   presentRound();
 }
 
-/* ===== 營地回復（含暫代技能的回復） ===== */
+/* ===== 營地回復（選項 3A：營地回復 50% 最大生命，殘頁篝火回復 35% 最大生命） ===== */
 function camp(isSkillPlaceholder) {
-  const healed = hero.maxHp - hero.hp;
-  hero.hp = hero.maxHp;
+  const ratio = isSkillPlaceholder ? SKILL_CAMP_HEAL_RATIO : CAMP_HEAL_RATIO;
+  const healTarget = Math.max(1, Math.floor(hero.maxHp * ratio));
+  const beforeHp = hero.hp;
+  hero.hp = Math.min(hero.maxHp, hero.hp + healTarget);
+  const healed = hero.hp - beforeHp;
   if (isSkillPlaceholder) {
-    log(`你在殘頁篝火旁靜心調息（暫代技能）。生命回復 ${healed} 點，現在是 ${hero.hp} / ${hero.maxHp}。`);
+    log(`你在殘頁篝火旁靜心調息（暫代技能，回復 35% 最大生命）。生命回復 ${healed} 點，現在是 ${hero.hp} / ${hero.maxHp}。`);
   } else {
-    log(`你在營地生火休息。生命回復 ${healed} 點，現在是 ${hero.hp} / ${hero.maxHp}。`);
+    log(`你在營地生火休息（回復 50% 最大生命）。生命回復 ${healed} 點，現在是 ${hero.hp} / ${hero.maxHp}。`);
   }
   renderStatus();
   setChoices([{ label: "繼續前進", action: advanceAfterEvent }]);
@@ -835,21 +848,23 @@ function offerItem(item, onDone) {
    戰鬥系統（拉簾戰鬥對話框、無前綴雙行戰報、極簡上下按鈕）
    ========================================================= */
 
-// 更新渾沌怪每回合動態排斥弱點（隨機物防減半或魔防減半）
+// 更新渾沌怪與一階段魔王每回合動態排斥弱點（一般渾沌怪防禦減半 ×0.5；一階段魔王防禦減免 30% 即 ×0.7）
 function refreshChaosWeakness(announce) {
   if (!enemy || enemy.type !== "chaos" || enemy.isPhase2Boss) return;
   enemy.weakness = Math.random() < 0.5 ? "phys" : "mag";
+  const mult = enemy.isBoss ? BOSS_WEAKNESS_MULT : 0.5;
+  const descWord = enemy.isBoss ? "降低 30%" : "減半";
   if (enemy.weakness === "phys") {
-    enemy.curPhysDef = Math.floor(enemy.physDef / 2);
+    enemy.curPhysDef = Math.floor(enemy.physDef * mult);
     enemy.curMagDef = enemy.magDef;
     if (announce) {
-      log(`【破綻】${enemy.name}體內的文字結構劇烈排斥，本回合「物理防禦」減半（${enemy.physDef} → ${enemy.curPhysDef}）！`, "hit");
+      log(`【破綻】${enemy.name}體內的文字結構劇烈排斥，本回合「物理防禦」${descWord}（${enemy.physDef} → ${enemy.curPhysDef}）！`, "hit");
     }
   } else {
     enemy.curPhysDef = enemy.physDef;
-    enemy.curMagDef = Math.floor(enemy.magDef / 2);
+    enemy.curMagDef = Math.floor(enemy.magDef * mult);
     if (announce) {
-      log(`【破綻】${enemy.name}體內的文字結構劇烈排斥，本回合「魔法防禦」減半（${enemy.magDef} → ${enemy.curMagDef}）！`, "hit");
+      log(`【破綻】${enemy.name}體內的文字結構劇烈排斥，本回合「魔法防禦」${descWord}（${enemy.magDef} → ${enemy.curMagDef}）！`, "hit");
     }
   }
 }
@@ -859,7 +874,8 @@ function showCombatButtons() {
   if (!enemy || hero.hp <= 0) return;
   const wPhys = hero.equip.physWeapon ? hero.equip.physWeapon.name : "徒手";
   const wMag = hero.equip.magWeapon ? hero.equip.magWeapon.name : "基礎魔力";
-  const swordTag = (hero.equip.accessory && hero.equip.accessory.isHeroSword) ? "［勇者之劍×1.5］" : "";
+  const hasSwordMult = (hero.equip.accessory && hero.equip.accessory.isHeroSword && hero.equip.accessory.atkMult > 1);
+  const swordTag = hasSwordMult ? `［勇者之劍×${hero.equip.accessory.atkMult}］` : "";
   setChoices([
     {
       label: `【物理攻擊】使用${wPhys}${swordTag}`,
@@ -874,23 +890,29 @@ function showCombatButtons() {
 
 async function startBattle(template) {
   if (template.isPhase2Boss) {
-    // 二階段真魔王：除生命（140）與飾品（勇者之劍）外，完全 1:1 鏡像複製勇者，且不減半防禦
+    // 二階段（選項 3A）：除生命（160）與飾品（勇者之劍）外，1:1 鏡像複製勇者並加上本源加成（雙攻+4、雙防+2），前半血處於【亂碼侵蝕】（攻擊×1.15／吸血+3）
     const mirror = calcStats(HERO_BASE, hero.equip, false);
+    const baseMirrorPhysAtk = mirror.physAtk + PHASE2_BOSS_BONUS_ATK;
+    const baseMirrorMagAtk = mirror.magAtk + PHASE2_BOSS_BONUS_ATK;
+    const baseMirrorPhysDef = mirror.physDef + PHASE2_BOSS_BONUS_DEF;
+    const baseMirrorMagDef = mirror.magDef + PHASE2_BOSS_BONUS_DEF;
     enemy = {
       name: template.name,
       trueName: template.trueName,
       type: "chaos",
-      typeLabel: template.typeLabel || "真魔王",
+      typeLabel: template.typeLabel || PHASE2_BOSS_HIDDEN_NAME,
       isBoss: false,
       isPhase2Boss: true,
       hp: template.hp,
       maxHp: template.hp,
-      physAtk: mirror.physAtk,
-      magAtk: mirror.magAtk,
-      physDef: mirror.physDef,
-      magDef: mirror.magDef,
-      curPhysDef: mirror.physDef,
-      curMagDef: mirror.magDef,
+      baseMirrorPhysAtk,
+      baseMirrorMagAtk,
+      physAtk: Math.floor(baseMirrorPhysAtk * PHASE2_BOSS_INIT_MULT),
+      magAtk: Math.floor(baseMirrorMagAtk * PHASE2_BOSS_INIT_MULT),
+      physDef: baseMirrorPhysDef,
+      magDef: baseMirrorMagDef,
+      curPhysDef: baseMirrorPhysDef,
+      curMagDef: baseMirrorMagDef,
       shield: mirror.shield,
       maxShield: mirror.shield,
       weakness: null,
@@ -902,7 +924,8 @@ async function startBattle(template) {
   } else {
     const equip = { physWeapon: null, magWeapon: null, armor: null, shield: null };
     template.items.forEach(it => { equip[it.slot] = it; });
-    const st = calcStats({ physAtk: 0, magAtk: 0, physDef: 0, magDef: 0, shield: 0 }, equip, false);
+    const baseSt = template.baseStats || { physAtk: 0, magAtk: 0, physDef: 0, magDef: 0, shield: 0 };
+    const st = calcStats(baseSt, equip, false);
 
     enemy = {
       name: template.name,
@@ -945,7 +968,7 @@ async function startBattle(template) {
   if (enemy.isBoss) {
     log("魔王的力量有點奇怪，似乎不屬於這裏……", "text-curse");
   } else if (enemy.isPhase2Boss) {
-    log(`【精神世界】${enemy.name}完全複製了你身上的文字裝備與基礎能力（不包含飾品【勇者之劍】）！`, "text-curse");
+    log(`【精神世界】${enemy.name}完全複製了你身上的文字裝備與基礎能力（不包含飾品【勇者之劍】），並發動【亂碼侵蝕】（攻擊×${PHASE2_BOSS_INIT_MULT}／命中吸取 ${PHASE2_BOSS_LIFESTEAL} 點生命）！`, "text-curse");
   }
 
   if (enemy.type === "chaos" && !enemy.isPhase2Boss) {
@@ -982,29 +1005,90 @@ async function startBattle(template) {
   showCombatButtons();
 }
 
-// 計算並套用傷害：回傳雙行戰報所需的「第 1 行主結果」與「第 2 行無前綴純算式」
+// 計算並套用傷害：支援【骰子模式】（0失手、18-20無視護盾、20無視50%防禦）與【撲克模式】（黑紅花色臨時+3、J/Q/K無視護盾、A無視50%防禦與護盾）
 function dealDamage(attackerName, atkType, atk, def, target, dice, cardInfo) {
   const atkLabel = atkType === "mag" ? "魔法攻擊" : "物理攻擊";
   const defLabel = atkType === "mag" ? "魔防" : "物防";
-  const dmg = Math.max(0, atk + dice - def);
-  const toShield = Math.min(target.shield, dmg);
+
+  // 1. 骰子模式（cardInfo 為 null）
+  if (!cardInfo) {
+    if (dice === 0) {
+      const mainLine = `${attackerName}發動【${atkLabel}】 ➔ 骰出 0 點失手，造成 0 點傷害！`;
+      const formulaLine = `骰子 0（失手） = 0 傷害`;
+      return { mainLine, formulaLine, dmg: 0, toShield: 0, toHp: 0 };
+    }
+    const isCrit20 = (dice === 20);
+    const ignoreShield = (dice >= DICE_PIERCE_SHIELD_MIN);
+    const effDef = isCrit20 ? Math.floor(def * DICE_CRIT_DEF_MULT) : def;
+    const dmg = Math.max(0, atk + dice - effDef);
+    const toShield = ignoreShield ? 0 : Math.min(target.shield, dmg);
+    const toHp = dmg - toShield;
+    target.shield -= toShield;
+    target.hp -= toHp;
+
+    let specialTag = "";
+    if (isCrit20) {
+      specialTag = "［骰出20：無視50%防禦＋無視護盾］";
+    } else if (ignoreShield) {
+      specialTag = `［骰出${dice}：無視護盾］`;
+    }
+
+    let mainLine = `${attackerName}發動【${atkLabel}】${specialTag} ➔ 造成 ${dmg} 點傷害！`;
+    if (dmg > 0) {
+      const parts = [];
+      if (toShield > 0) parts.push(`護盾 −${toShield}`);
+      if (toHp > 0) parts.push(`生命 −${toHp}`);
+      mainLine += `（${parts.join("，")}）`;
+    }
+    const rollExpr = ignoreShield ? `骰子 ${dice}（穿盾）` : `骰子 ${dice}`;
+    const defExpr = isCrit20 ? `${defLabel} ${effDef}（原 ${def} 減半）` : `${defLabel} ${def}`;
+    const formulaLine = `${atk} + ${rollExpr} − ${defExpr} = ${dmg} 傷害`;
+    return { mainLine, formulaLine, dmg, toShield, toHp };
+  }
+
+  // 2. 撲克模式（cardInfo 存在：無失手；黑色花色物攻臨時+3、紅色花色魔攻臨時+3；J/Q/K 無視護盾；A 無視50%防禦＋無視護盾）
+  const isBlackSuit = (cardInfo.suit.key === "S" || cardInfo.suit.key === "C");
+  const suitMatched = (atkType === "phys" && isBlackSuit) || (atkType === "mag" && !isBlackSuit);
+  const suitBonus = suitMatched ? POKER_SUIT_ATK_BONUS : 0;
+  const effAtk = atk + suitBonus;
+
+  const isAce = (cardInfo.rank === "A");
+  const isFace = (dice >= POKER_FACE_PIERCE_MIN);
+  const ignoreShield = (isAce || isFace);
+  const effDef = isAce ? Math.floor(def * POKER_ACE_DEF_MULT) : def;
+
+  const dmg = Math.max(0, effAtk + dice - effDef);
+  const toShield = ignoreShield ? 0 : Math.min(target.shield, dmg);
   const toHp = dmg - toShield;
   target.shield -= toShield;
   target.hp -= toHp;
 
-  const rollExpr = cardInfo
-    ? `撲克 ${dice}（${cardInfo.label}）`
-    : `骰子 ${dice}`;
+  const tags = [];
+  if (suitBonus > 0) {
+    tags.push(`${ isBlackSuit ? "黑花色物攻" : "紅花色魔攻" }+${suitBonus}`);
+  }
+  if (isAce) {
+    tags.push("王牌A：無視50%防禦＋無視護盾");
+  } else if (isFace) {
+    tags.push(`人頭牌${cardInfo.rank}：無視護盾`);
+  }
+  const tagStr = tags.length > 0 ? `［${tags.join("｜")}］` : "";
 
-  let mainLine = `${attackerName}發動【${atkLabel}】 ➔ 造成 ${dmg} 點傷害！`;
+  let mainLine = `${attackerName}發動【${atkLabel}】${tagStr} ➔ 造成 ${dmg} 點傷害！`;
   if (dmg > 0) {
     const parts = [];
     if (toShield > 0) parts.push(`護盾 −${toShield}`);
     if (toHp > 0) parts.push(`生命 −${toHp}`);
     mainLine += `（${parts.join("，")}）`;
   }
-  const formulaLine = `${atk} + ${rollExpr} − ${defLabel} ${def} = ${dmg} 傷害`;
-  return { mainLine, formulaLine };
+
+  const atkExpr = suitBonus > 0 ? `${effAtk}（${atk}+花色${suitBonus}）` : `${atk}`;
+  const rollExpr = ignoreShield
+    ? `撲克 ${dice}（${cardInfo.label} 穿盾）`
+    : `撲克 ${dice}（${cardInfo.label}）`;
+  const defExpr = isAce ? `${defLabel} ${effDef}（原 ${def} 減半）` : `${defLabel} ${def}`;
+  const formulaLine = `${atkExpr} + ${rollExpr} − ${defExpr} = ${dmg} 傷害`;
+  return { mainLine, formulaLine, dmg, toShield, toHp };
 }
 
 async function heroAttack(atkType) {
@@ -1037,7 +1121,7 @@ async function heroAttack(atkType) {
   enemy.hp = heroTarget.hp;
   renderStatus();
 
-  // 二階段真魔王：勇者第一次攻擊後的專屬台詞
+  // 二階段：勇者第一次攻擊後的專屬台詞（半血前 enemy.name 為 @$+%^&¥，完全不出現真魔王或沙坦）
   if (enemy.isPhase2Boss && !enemy.firstAttackDone) {
     enemy.firstAttackDone = true;
     log(`${enemy.name}：「啊啊你爲甚麼會有前勇者的武器，這個混蛋竟然死後也不安寧！！！」`, "text-curse");
@@ -1045,33 +1129,37 @@ async function heroAttack(atkType) {
 
   if (enemy.hp <= 0) { await winBattle(); return; }
 
-  // 一階段魔王半血意識掙扎加劇提示
+  // 一階段魔王半血掙扎加劇提示（完全不顯示任何有關前勇者的部分，只顯示「魔王突然劇烈掙扎」）
   if (enemy.isBoss && !enemy.halfHpTriggered && enemy.hp <= enemy.maxHp * BOSS_STRUGGLE_HP_RATIO) {
     enemy.halfHpTriggered = true;
-    log(`【異變】${enemy.name}的生命降至一半以下，體內殘存的意識開始劇烈甦醒！（掙扎機率提升至 ${Math.round(BOSS_STRUGGLE_CHANCE_LOW_HP * 100)}%）`, "text-curse");
+    log(BOSS_STRUGGLE_TEXT, "text-curse");
   }
 
-  // 二階段真魔王半血顯露真名「文字.沙坦」並進入狂暴狀態（未計算前的攻擊力 ×1.5，面板外框微光同步轉為鮮紅）
+  // 二階段半血（HP <= 80）顯露真名「文字.沙坦」並進入狂暴狀態（雙攻提升為 ×1.45 ＋ 立即重鑄 15 點原典黑盾）
   if (enemy.isPhase2Boss && !enemy.halfHpTriggered && enemy.hp <= enemy.maxHp * PHASE2_BOSS_RAGE_HP_RATIO) {
     enemy.halfHpTriggered = true;
+    const oldHiddenName = enemy.name;
     enemy.name = enemy.trueName || PHASE2_BOSS_TRUE_NAME;
+    enemy.typeLabel = "真魔王";
     enemy.inRage = true;
-    enemy.physAtk = Math.floor(enemy.physAtk * PHASE2_BOSS_RAGE_MULT);
-    enemy.magAtk = Math.floor(enemy.magAtk * PHASE2_BOSS_RAGE_MULT);
+    enemy.physAtk = Math.floor(enemy.baseMirrorPhysAtk * PHASE2_BOSS_RAGE_MULT);
+    enemy.magAtk = Math.floor(enemy.baseMirrorMagAtk * PHASE2_BOSS_RAGE_MULT);
+    enemy.shield += PHASE2_BOSS_RAGE_SHIELD;
+    enemy.maxShield = Math.max(enemy.maxShield, enemy.shield);
     if ($battleDrawerTitle) {
       $battleDrawerTitle.innerHTML = colorize(`與 ${escapeHtml(enemy.name)} 的戰鬥`);
     }
-    log(`【真名顯露】隨着重創，真魔王身上的亂碼屏障碎裂，露出了它的真名——「${enemy.name}」！`, "big");
+    log(`【真名顯露】隨着重創，${oldHiddenName}身上的亂碼屏障碎裂，露出了它的真名——「${enemy.name}」！`, "big");
     log(`勇者：「原來魔王的名字叫${enemy.name}….」`, "hit");
     log(`${enemy.name}：「竟然被你看見了...那麼你就非死不可了！！」`, "text-curse");
-    log(`【狂暴】${enemy.name}進入狂暴狀態！物理與魔法攻擊力提升為 1.5 倍（物攻 ${enemy.physAtk}／魔攻 ${enemy.magAtk}）！`, "text-curse");
+    log(`【狂暴】${enemy.name}進入狂暴狀態！物理與魔法攻擊力提升為 ${PHASE2_BOSS_RAGE_MULT} 倍（物攻 ${enemy.physAtk}／魔攻 ${enemy.magAtk}），並重鑄了 ${PHASE2_BOSS_RAGE_SHIELD} 點原典黑盾！`, "text-curse");
     renderStatus();
   }
 
   await enemyAttack();
   if (!enemy || hero.hp <= 0) return;
 
-  // 渾沌怪每回合結束後動態切換排斥弱點（二階段真魔王不減半防禦）
+  // 渾沌怪與一階段魔王每回合結束後動態切換排斥弱點（二階段不減防）
   if (enemy.type === "chaos" && !enemy.isPhase2Boss) {
     refreshChaosWeakness(true);
   }
@@ -1080,22 +1168,26 @@ async function heroAttack(atkType) {
 }
 
 async function enemyAttack() {
-  // 一階段魔王意識掙扎判定（初期 15%，生命 <= 50% 時提升至 40%）
+  // 一階段魔王掙扎判定（初期 15%，半血以下 30%）：
+  // 嚴格不顯示任何有關前勇者的部分，只顯示「魔王突然劇烈掙扎」➔ 50%「魔王揮空並且傷到了自己」／ 50%「魔王暴走！！！」
+  let berserkBonus = 0;
   if (enemy.isBoss) {
     const struggleChance = (enemy.hp <= enemy.maxHp * BOSS_STRUGGLE_HP_RATIO)
       ? BOSS_STRUGGLE_CHANCE_LOW_HP
       : BOSS_STRUGGLE_CHANCE_BASE;
     if (Math.random() < struggleChance) {
+      log(BOSS_STRUGGLE_TEXT, "text-curse");
       if (Math.random() < 0.5) {
-        log(`【掙扎】${enemy.name}體內的殘存意識突然反抗，痛苦地抱住頭顱，攻擊揮空沒有造成傷害！`, "text-curse");
-      } else {
         enemy.hp = Math.max(0, enemy.hp - BOSS_STRUGGLE_SELF_DMG);
-        log(`【掙扎】${enemy.name}體內的意識劇烈衝突，強行壓制失控的力量，反噬自身 ${BOSS_STRUGGLE_SELF_DMG} 點生命！`, "text-curse");
+        log(BOSS_STRUGGLE_SELF_HIT_TEXT, "text-curse");
+        renderStatus();
+        await sleep(HIT_MS);
+        if (enemy.hp <= 0) await winBattle();
+        return;
+      } else {
+        berserkBonus = BOSS_STRUGGLE_BERSERK_ATK;
+        log(BOSS_STRUGGLE_BERSERK_TEXT, "text-curse");
       }
-      renderStatus();
-      await sleep(HIT_MS);
-      if (enemy.hp <= 0) await winBattle();
-      return;
     }
   }
 
@@ -1108,7 +1200,7 @@ async function enemyAttack() {
   }
 
   const isMag = atkType === "mag";
-  const atkVal = isMag ? enemy.magAtk : enemy.physAtk;
+  const atkVal = (isMag ? enemy.magAtk : enemy.physAtk) + berserkBonus;
   const defVal = isMag ? s.magDef : s.physDef;
   const rollWord = gameMode === "poker" ? "撲克" : "骰子";
   const labelNote = isMag
@@ -1130,10 +1222,11 @@ async function enemyAttack() {
   const hpBefore = hero.hp;
   const report = dealDamage(enemy.name, atkType, atkVal, defVal, target, dice, drawnCard);
 
-  // 檢查是否觸發飾品【勇者之劍】殘魂免疫致命傷（最多 3 次，鎖 1 血）
+  // 檢查是否觸發飾品【勇者之劍】殘魂免疫致命傷（選項 2A：最多 2 次，鎖 1 血，且每觸發 1 次攻擊倍率下降 0.15）
   const acc = hero.equip.accessory;
   if (target.hp <= 0 && acc && acc.isHeroSword && acc.blocksLeft > 0) {
     acc.blocksLeft--;
+    acc.atkMult = Math.max(1.0, Math.round((acc.atkMult - HERO_SWORD_BLOCK_DECAY) * 100) / 100);
     hero.shield = 0;
     hero.hp = 1; // 保留 1 點生命（鎖 1 血）
     logCombatReport(false, report.mainLine, report.formulaLine);
@@ -1144,11 +1237,11 @@ async function enemyAttack() {
 
     // 畫面變暗並在中心顯示文字消失效果
     if (acc.blocksLeft > 0) {
-      log("勇者之劍裏的殘魂突然出現，爲勇者擋下了致命一擊。勇者的殘魂變弱了一分。（勇者保留 1 點生命）", "hit");
+      log(`勇者之劍裏的殘魂突然出現，爲勇者擋下了致命一擊。勇者的殘魂變弱了一分（攻擊倍率降至 ×${acc.atkMult}，勇者保留 1 點生命）。`, "hit");
       renderStatus();
       await playStorySequence([HERO_SWORD_BLOCK_TEXT]);
     } else {
-      log("勇者之劍裏的殘魂拼盡最後一份力爲勇者擋下致命一擊。勇者的殘魂消失了...（勇者保留 1 點生命）", "hit");
+      log("勇者之劍裏的殘魂拼盡最後一份力爲勇者擋下致命一擊。勇者的殘魂消失了...（攻擊加成消逝，勇者保留 1 點生命）", "hit");
       log(`${enemy.name}：「（邪笑）看你還有甚麼手段抵擋我」`, "text-curse");
       renderStatus();
       await playStorySequence([HERO_SWORD_BLOCK_TEXT, HERO_SWORD_VANISH_TEXT]);
@@ -1159,6 +1252,17 @@ async function enemyAttack() {
   logCombatReport(false, report.mainLine, report.formulaLine);
   hero.shield = target.shield;
   hero.hp = target.hp;
+
+  // 二階段前半血【亂碼侵蝕】吸血機制：若本次攻擊對勇者造成實際生命傷害且勇者尚未倒下，吸取 3 點生命
+  if (enemy && enemy.isPhase2Boss && !enemy.inRage && report.toHp > 0 && hero.hp > 0) {
+    const beforeEnemyHp = enemy.hp;
+    enemy.hp = Math.min(enemy.maxHp, enemy.hp + PHASE2_BOSS_LIFESTEAL);
+    const healedEnemy = enemy.hp - beforeEnemyHp;
+    if (healedEnemy > 0) {
+      log(`【亂碼侵蝕】${enemy.name}吞噬了飛濺的血肉文字，回復 ${healedEnemy} 點生命（目前生命 ${enemy.hp} / ${enemy.maxHp}）！`, "text-curse");
+    }
+  }
+
   renderStatus();
 
   await heroHitAnim(hero.hp < hpBefore);
@@ -1170,14 +1274,14 @@ async function winBattle() {
   // 先播放「從底部收回戰鬥對話框」動畫，使後續劇情與掉寶回到外層一般對話框
   await closeBattleDrawerAnim();
 
-  // 一階段魔王被擊敗：判斷是否為「完全徒手通關彩蛋」或「進入二階段精神世界」
+  // 一階段魔王被擊敗：此時勇者才發現魔王的真實身分是「前勇者」！
   if (enemy.isBoss) {
     enemy = null;
     renderStatus();
 
     // 隱藏彩蛋：全程未穿戴任何文字裝備（完全徒手／初始狀態）
     if (isCompletelyUnarmed()) {
-      log("【隱藏彩蛋】你全程沒有借助任何文字裝備的力量，以純粹的血肉之軀擊倒了前代勇者！", "big");
+      log("【隱藏彩蛋】你全程沒有借助任何文字裝備的力量，以純粹的血肉之軀擊倒了文字魔王，揭開了他是前勇者的真相！", "big");
       for (const line of UNARMED_EGG_TEXTS) {
         log(line, "hit");
       }
@@ -1190,13 +1294,16 @@ async function winBattle() {
       return;
     }
 
-    // 正常路線：前勇者恢復意識託付遺物【勇者之劍】（飾品欄），補滿血並以文字消失效果演出過場，隨後進入二階段
+    // 正常路線：文字魔王倒下後，勇者發現其身分為「前勇者」，獲得【勇者之劍】（回復 50% 最大生命、初始 ×1.3 攻擊、2 次殘魂擋死）
     const swordItem = { ...HERO_SWORD_ITEM };
     hero.equip.accessory = swordItem;
-    hero.hp = hero.maxHp; // 拿到勇者之劍第一次補滿血
+    const healGain = Math.max(1, Math.floor(hero.maxHp * HERO_SWORD_HEAL_RATIO));
+    const beforeHp = hero.hp;
+    hero.hp = Math.min(hero.maxHp, hero.hp + healGain);
+    const actualHealed = hero.hp - beforeHp;
     sep();
-    log("文字魔王倒下了……他身上的文字枷鎖出現裂痕，前勇者暫時恢復了意識。", "big");
-    log(`你獲得了前勇者的遺物飾品：【${swordItem.name}】（${swordItem.desc}）！勇者生命完全恢復（${hero.hp} / ${hero.maxHp}）！`, "hit");
+    log("文字魔王倒下了……他身上的文字枷鎖出現裂痕，露出了底下的真容——竟然是前勇者！", "big");
+    log(`你獲得了前勇者的遺物飾品：【${swordItem.name}】（${swordItem.desc}）！勇者生命回復 ${actualHealed} 點（目前生命 ${hero.hp} / ${hero.maxHp}）！`, "hit");
     for (const line of PHASE1_CLEAR_TEXTS) {
       log(line, "text-curse");
     }
@@ -1205,13 +1312,13 @@ async function winBattle() {
     await playStorySequence(PHASE1_CLEAR_TEXTS);
 
     sep();
-    log("── 意識墜入精神世界，二階段真魔王降臨！", "big");
+    log(`── 意識墜入精神世界，${PHASE2_BOSS_HIDDEN_NAME}降臨！`, "big");
     await bossAppearAnim();
     await startBattle(PHASE2_BOSS);
     return;
   }
 
-  // 二階段真魔王（文字.沙坦）被擊敗：演出 4 句勝利結局文字消失動畫
+  // 二階段（文字.沙坦）被擊敗：演出 4 句勝利結局文字消失動畫
   if (enemy.isPhase2Boss) {
     enemy = null;
     renderStatus();
