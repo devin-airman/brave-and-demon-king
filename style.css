@@ -100,11 +100,29 @@ body {
 }
 .bar-fill {
   height: 100%;
-  transition: width 240ms ease-out;
+  position: relative;
+  transition: width 260ms ease-out;
+  z-index: 2;
+}
+.bar-ghost {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.85);
+  transition: width 550ms ease-out 220ms;
+  z-index: 1;
+}
+.bar-ghost.instant {
+  transition: width 260ms ease-out 0ms;
 }
 .bar-fill.hp-hero { background: #38d399; }
 .bar-fill.hp-enemy { background: #ff5252; }
-.bar-fill.shield-fill { background: #5bc0be; }
+.bar-fill.shield-fill {
+  background: #5bc0be;
+  transition: width 550ms ease-out; /* 第九版更新：延長護盾值減少與變化的平滑動畫 */
+}
 .stat-num {
   white-space: nowrap;
   font-size: 13px;
@@ -147,6 +165,8 @@ body {
 
 /* ===== 第 2 部分：獨立 3 行「敵人對戰卡」（依敵人名字顏色變換外框微光） ===== */
 #enemy-panel {
+  position: relative;
+  overflow: hidden;
   background: #090406;
   border: 1px solid var(--enemy-glow, #ff5c5c);
   box-shadow: 0 0 12px var(--enemy-glow-soft, rgba(255, 92, 92, 0.38)),
@@ -157,6 +177,62 @@ body {
   gap: 5px;
   border-radius: 2px;
   transition: border-color 280ms ease, box-shadow 280ms ease;
+}
+
+/* 敵人面板專屬劈刀動畫 */
+#enemy-panel .enemy-panel-slash {
+  position: absolute;
+  top: 50%;
+  left: -25%;
+  width: 150%;
+  height: 4px;
+  background: linear-gradient(90deg, transparent 0%, #ffffff 30%, #ffffff 70%, transparent 100%);
+  box-shadow: 0 0 12px #ffffff, 0 0 24px #4da6ff;
+  transform: translateY(-50%) rotate(-20deg) scaleX(0);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+#enemy-panel.slash-hit .enemy-panel-slash {
+  animation: enemySlashAnim var(--sword-ms, 450ms) cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+}
+
+@keyframes enemySlashAnim {
+  0% { transform: translateY(-50%) rotate(-20deg) scaleX(0); opacity: 0; }
+  20% { transform: translateY(-50%) rotate(-20deg) scaleX(1); opacity: 1; }
+  65% { transform: translateY(-50%) rotate(-20deg) scaleX(1); opacity: 0.95; }
+  100% { transform: translateY(-50%) rotate(-20deg) scaleX(1.1); opacity: 0; }
+}
+
+/* 敵人面板受擊紅光（扣血）與金光（護盾抵扣或0傷） */
+#enemy-panel.glow-red {
+  animation: enemyGlowRed var(--hit-ms, 500ms) ease-out;
+}
+#enemy-panel.glow-gold {
+  animation: enemyGlowGold var(--hit-ms, 500ms) ease-out;
+}
+@keyframes enemyGlowRed {
+  0% { box-shadow: 0 0 0 0 transparent; }
+  35% {
+    box-shadow: 0 0 22px 6px var(--red, #ff3b3b), inset 0 0 14px var(--red, #ff3b3b);
+    border-color: var(--red, #ff3b3b);
+  }
+  100% {
+    box-shadow: 0 0 12px var(--enemy-glow-soft, rgba(255, 92, 92, 0.38)),
+                inset 0 0 8px var(--enemy-glow-inset, rgba(255, 92, 92, 0.14));
+  }
+}
+@keyframes enemyGlowGold {
+  0% { box-shadow: 0 0 0 0 transparent; }
+  35% {
+    box-shadow: 0 0 22px 6px var(--gold, #ffd23f), inset 0 0 14px var(--gold, #ffd23f);
+    border-color: var(--gold, #ffd23f);
+  }
+  100% {
+    box-shadow: 0 0 12px var(--enemy-glow-soft, rgba(255, 92, 92, 0.38)),
+                inset 0 0 8px var(--enemy-glow-inset, rgba(255, 92, 92, 0.14));
+  }
 }
 .enemy-tag {
   font-size: 13.5px;
@@ -942,4 +1018,146 @@ body {
 .tester-floor-list button:active {
   background: #262626;
   color: #e8e8e8;
+}
+
+/* 撲克特殊效果提示（取代牌面下方算式） */
+.poker-special-hint {
+  color: #ffd23f;
+  font-weight: bold;
+  font-size: 15px;
+  letter-spacing: 1px;
+}
+
+/* 戰鬥拉簾內的結算提示小卡片 */
+.combat-report.victory-report {
+  background: rgba(255, 210, 63, 0.08);
+  border: 1px solid rgba(255, 210, 63, 0.45);
+  box-shadow: 0 0 8px rgba(255, 210, 63, 0.2);
+  text-align: center;
+  padding: 8px 10px;
+}
+
+/* 黑幕劇情文字跳過提示 */
+#story {
+  cursor: pointer;
+}
+#story .skip-hint {
+  position: absolute;
+  bottom: 22px;
+  font-size: 12.5px;
+  color: #666;
+  letter-spacing: 1px;
+  pointer-events: none;
+}
+
+
+/* ===== 第九版新增：裝備文字縮小消失動畫（紫色，延長至 2.5 秒且徹底杜絕二次閃現） ===== */
+#equip-anim-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+  background: rgba(0, 0, 0, 0.76);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: all;
+  transition: opacity 280ms ease;
+}
+#equip-anim-overlay.show {
+  opacity: 1;
+}
+.equip-anim-char {
+  color: #c084fc;
+  font-size: 76px;
+  font-weight: bold;
+  font-family: inherit;
+  text-shadow: 0 0 24px rgba(192, 132, 252, 0.85), 0 0 48px rgba(168, 85, 247, 0.65);
+  transform: scale(0);
+  opacity: 0;
+}
+#equip-anim-overlay.animating .equip-anim-char {
+  animation: equipCharShrink 2500ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+@keyframes equipCharShrink {
+  0% { transform: scale(1.45); opacity: 0; }
+  15% { transform: scale(1); opacity: 1; }
+  55% { transform: scale(0.92); opacity: 0.95; }
+  100% { transform: scale(0.01); opacity: 0; }
+}
+
+/* ===== 第九版新增：全螢幕文字消失轉場（黃色）與傳送門白色掃描線 ===== */
+#text-fade-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 19;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: all;
+  transition: opacity 300ms ease;
+}
+#text-fade-overlay.show {
+  opacity: 1;
+}
+#text-fade-overlay .fade-content {
+  font-size: 26px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  color: #ffd23f;
+  text-align: center;
+  padding: 0 20px;
+  text-shadow: 0 0 16px rgba(255, 210, 63, 0.65);
+  opacity: 0;
+}
+@media (max-width: 480px) {
+  #text-fade-overlay .fade-content {
+    font-size: 20px;
+  }
+}
+#text-fade-overlay.animating .fade-content {
+  animation: textFadeScreenAnim var(--fade-text-ms, 2800ms) cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+@keyframes textFadeScreenAnim {
+  0% { opacity: 0; transform: scale(0.92); }
+  18% { opacity: 1; transform: scale(1); }
+  68% { opacity: 0.98; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.06); }
+}
+
+/* 傳送門掃描線閃爍動畫（延長並流暢掃描兩次） */
+#text-fade-overlay .fade-scanline {
+  display: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 3px;
+  top: 0;
+  background: #ffffff;
+  box-shadow: 0 0 16px #ffffff, 0 0 32px #4da6ff;
+  opacity: 0;
+  pointer-events: none;
+}
+#text-fade-overlay.with-scanline .fade-scanline {
+  display: block;
+  animation: portalScanFlash var(--fade-text-ms, 3000ms) ease-in-out forwards;
+}
+@keyframes portalScanFlash {
+  0% { top: 0; opacity: 0; }
+  12% { opacity: 1; }
+  46% { top: 100%; opacity: 0.85; }
+  50% { top: 0; opacity: 0; }
+  58% { top: 0; opacity: 1; }
+  94% { top: 100%; opacity: 0.85; }
+  100% { top: 100%; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #equip-anim-overlay.animating .equip-anim-char,
+  #text-fade-overlay.animating .fade-content,
+  #text-fade-overlay.with-scanline .fade-scanline {
+    animation: none !important;
+  }
 }

@@ -6,6 +6,9 @@
    二階段心魔戰（半血前保密真名只顯示 @$+%^&¥，半血後顯露真名文字.沙坦）
    ========================================================= */
 let hero, floor, round, turn, floorDeck, enemy, gameOver;
+let lastHeroHp = HERO_BASE.hp;
+let lastEnemyHp = null;
+let lastRenderedEnemyRef = null;
 let gameMode = "dice"; // "dice" (0–20 骰子模式) 或 "poker" (1–13 撲克模式)
 let lastDrawnCard = null; // 紀錄最近一次抽出的撲克牌資訊
 let equipExpanded = false; // 頂部裝備抽屜展開狀態
@@ -379,6 +382,8 @@ function renderStatus() {
   const maxShield = s.shield;
   const hpCur = Math.max(0, hero.hp);
   const hpPct = hero.maxHp > 0 ? Math.max(0, Math.min(100, (hpCur / hero.maxHp) * 100)) : 0;
+  const isHeroHealing = (lastHeroHp !== null && hero.hp >= lastHeroHp);
+  lastHeroHp = hero.hp;
   const shPct = maxShield > 0 ? Math.max(0, Math.min(100, (Math.max(0, curShield) / maxShield) * 100)) : 0;
 
   const fInfo = getFloorInfo(floor);
@@ -388,65 +393,108 @@ function renderStatus() {
     : `勇者${modeTag}　第 ${floor} 層【${fInfo.name}】　第 ${round} / ${ROUNDS_PER_FLOOR} 回合`;
 
   const equipBtnLabel = equipExpanded ? "裝備 ▲" : "裝備 ▼";
-  const equipBtnActive = equipExpanded ? " active" : "";
-  const drawerHidden = equipExpanded ? "" : " hidden";
 
-  const statusHtml = `
-    <div class="panel-row-top">
-      <div class="panel-title-group">
-        <button type="button" class="tester-btn" id="btn-tester">測試者</button>
-        <div class="panel-title">${colorize(escapeHtml(stageTitle))}</div>
+  // 第 1 部分：頂部勇者面板（單次建立骨架＋原地更新 DOM 以確保 CSS transition 與白色受傷殘影流暢運作）
+  let $heroHpFill = $status.querySelector(".bar-fill.hp-hero");
+  if (!$heroHpFill) {
+    $status.innerHTML = `
+      <div class="panel-row-top">
+        <div class="panel-title-group">
+          <button type="button" class="tester-btn" id="btn-tester">測試者</button>
+          <div class="panel-title" id="hero-panel-title"></div>
+        </div>
+        <div class="header-actions">
+          <button type="button" class="mini-btn" id="btn-toggle-equip"></button>
+          <button type="button" class="mini-btn" id="btn-open-history">歷史對話</button>
+        </div>
       </div>
-      <div class="header-actions">
-        <button type="button" class="mini-btn${equipBtnActive}" id="btn-toggle-equip">${equipBtnLabel}</button>
-        <button type="button" class="mini-btn" id="btn-open-history">歷史對話</button>
+      <div class="bars-row">
+        <div class="stat-bar-group">
+          <span class="stat-label">生命</span>
+          <div class="bar-track">
+            <div class="bar-ghost hp-hero-ghost" style="width:${hpPct}%"></div>
+            <div class="bar-fill hp-hero" style="width:${hpPct}%"></div>
+          </div>
+          <span class="stat-num" id="hero-hp-num"></span>
+        </div>
+        <div class="stat-bar-group">
+          <span class="stat-label">護盾</span>
+          <div class="bar-track">
+            <div class="bar-fill shield-fill" id="hero-sh-fill" style="width:${shPct}%"></div>
+          </div>
+          <span class="stat-num" id="hero-sh-num"></span>
+        </div>
       </div>
-    </div>
-    <div class="bars-row">
-      <div class="stat-bar-group">
-        <span class="stat-label">生命</span>
-        <div class="bar-track"><div class="bar-fill hp-hero" style="width:${hpPct}%"></div></div>
-        <span class="stat-num">${hpCur} / ${hero.maxHp}</span>
-      </div>
-      <div class="stat-bar-group">
-        <span class="stat-label">護盾</span>
-        <div class="bar-track"><div class="bar-fill shield-fill" style="width:${shPct}%"></div></div>
-        <span class="stat-num">${Math.max(0, curShield)} / ${maxShield}</span>
-      </div>
-    </div>
-    <div class="stats-quad-row">
+      <div class="stats-quad-row" id="hero-stats-quad"></div>
+      <div id="equip-drawer" class="hidden"></div>`;
+
+    const $btnTester = document.getElementById("btn-tester");
+    if ($btnTester) $btnTester.onclick = openTesterModal;
+    const $btnEquip = document.getElementById("btn-toggle-equip");
+    if ($btnEquip) {
+      $btnEquip.onclick = () => {
+        equipExpanded = !equipExpanded;
+        renderStatus();
+      };
+    }
+    const $btnHist = document.getElementById("btn-open-history");
+    if ($btnHist) $btnHist.onclick = openHistoryModal;
+  }
+
+  const $title = document.getElementById("hero-panel-title");
+  if ($title) $title.innerHTML = colorize(escapeHtml(stageTitle));
+
+  const $btnEquip = document.getElementById("btn-toggle-equip");
+  if ($btnEquip) {
+    $btnEquip.textContent = equipBtnLabel;
+    $btnEquip.classList.toggle("active", !!equipExpanded);
+  }
+
+  $heroHpFill = $status.querySelector(".bar-fill.hp-hero");
+  const $heroHpGhost = $status.querySelector(".bar-ghost.hp-hero-ghost");
+  const $heroShFill = document.getElementById("hero-sh-fill");
+
+  if ($heroHpGhost && $heroHpFill) {
+    if (isHeroHealing) {
+      $heroHpGhost.classList.add("instant");
+      $heroHpGhost.style.width = hpPct + "%";
+      $heroHpFill.style.width = hpPct + "%";
+    } else {
+      $heroHpGhost.classList.remove("instant");
+      $heroHpFill.style.width = hpPct + "%";
+      $heroHpGhost.style.width = hpPct + "%";
+    }
+  }
+  if ($heroShFill) {
+    $heroShFill.style.width = shPct + "%";
+  }
+
+  const $hpNum = document.getElementById("hero-hp-num");
+  if ($hpNum) $hpNum.textContent = `${hpCur} / ${hero.maxHp}`;
+  const $shNum = document.getElementById("hero-sh-num");
+  if ($shNum) $shNum.textContent = `${Math.max(0, curShield)} / ${maxShield}`;
+
+  const $quad = document.getElementById("hero-stats-quad");
+  if ($quad) {
+    $quad.innerHTML = `
       <div class="stat-cell">物攻 <span class="val">${s.physAtk}</span></div>
       <div class="stat-cell">物防 <span class="val">${s.physDef}</span></div>
       <div class="stat-cell">魔攻 <span class="val">${s.magAtk}</span></div>
-      <div class="stat-cell">魔防 <span class="val">${s.magDef}</span></div>
-    </div>
-    <div id="equip-drawer" class="${drawerHidden.trim()}">
+      <div class="stat-cell">魔防 <span class="val">${s.magDef}</span></div>`;
+  }
+
+  const $drawer = document.getElementById("equip-drawer");
+  if ($drawer) {
+    $drawer.classList.toggle("hidden", !equipExpanded);
+    $drawer.innerHTML = `
       <div>物理武器：${escapeHtml(itemText(hero.equip.physWeapon))}</div>
       <div>魔法武器：${escapeHtml(itemText(hero.equip.magWeapon))}</div>
       <div>裝甲：${escapeHtml(itemText(hero.equip.armor))}</div>
       <div>盾牌：${escapeHtml(itemText(hero.equip.shield))}</div>
-      <div>飾品：${escapeHtml(itemText(hero.equip.accessory))}</div>
-    </div>`;
-
-  $status.innerHTML = statusHtml;
-
-  const $btnTester = document.getElementById("btn-tester");
-  if ($btnTester) {
-    $btnTester.onclick = openTesterModal;
-  }
-  const $btnEquip = document.getElementById("btn-toggle-equip");
-  if ($btnEquip) {
-    $btnEquip.onclick = () => {
-      equipExpanded = !equipExpanded;
-      renderStatus();
-    };
-  }
-  const $btnHist = document.getElementById("btn-open-history");
-  if ($btnHist) {
-    $btnHist.onclick = openHistoryModal;
+      <div>飾品：${escapeHtml(itemText(hero.equip.accessory))}</div>`;
   }
 
-  // 第 2 部分：獨立 3 行「敵人對戰卡」（第 3 行同樣對齊為「物攻｜物防｜魔攻｜魔防」）
+  // 第 2 部分：獨立 3 行「敵人對戰卡」（原地更新 DOM 保留生命殘影與護盾平滑過渡）
   if (enemy && $enemyPanel) {
     const eColor = ENEMY_COLORS[enemy.name] || "#ff5c5c";
     $enemyPanel.style.setProperty("--enemy-glow", eColor);
@@ -466,6 +514,8 @@ function renderStatus() {
 
     const eHpCur = Math.max(0, enemy.hp);
     const eHpPct = enemy.maxHp > 0 ? Math.max(0, Math.min(100, (eHpCur / enemy.maxHp) * 100)) : 0;
+    const isEnemyHealing = (lastEnemyHp !== null && enemy.hp >= lastEnemyHp);
+    lastEnemyHp = enemy.hp;
     const eShMax = enemy.maxShield || 0;
     const eShCur = Math.max(0, enemy.shield);
     const eShPct = eShMax > 0 ? Math.max(0, Math.min(100, (eShCur / eShMax) * 100)) : 0;
@@ -477,33 +527,115 @@ function renderStatus() {
       ? `<span class="debuff">${enemy.curMagDef}↓</span>`
       : `<span class="val">${enemy.curMagDef}</span>`;
 
-    $enemyPanel.innerHTML = `
-      <div class="panel-row-top">
-        <div class="panel-title">敵人：${colorize(escapeHtml(enemy.name))}</div>
-        <div class="enemy-tag">${escapeHtml(weakNote)}</div>
-      </div>
-      <div class="bars-row">
-        <div class="stat-bar-group">
-          <span class="stat-label">生命</span>
-          <div class="bar-track"><div class="bar-fill hp-enemy" style="width:${eHpPct}%"></div></div>
-          <span class="stat-num">${eHpCur} / ${enemy.maxHp}</span>
+    let $eHpFill = $enemyPanel.querySelector(".bar-fill.hp-enemy");
+    if (!$eHpFill || lastRenderedEnemyRef !== enemy) {
+      lastRenderedEnemyRef = enemy;
+      $enemyPanel.innerHTML = `
+        <div class="enemy-panel-slash" aria-hidden="true"></div>
+        <div class="panel-row-top">
+          <div class="panel-title" id="enemy-panel-title"></div>
+          <div class="enemy-tag" id="enemy-panel-tag"></div>
         </div>
-        <div class="stat-bar-group">
-          <span class="stat-label">護盾</span>
-          <div class="bar-track"><div class="bar-fill shield-fill" style="width:${eShPct}%"></div></div>
-          <span class="stat-num">${eShCur} / ${eShMax}</span>
+        <div class="bars-row">
+          <div class="stat-bar-group">
+            <span class="stat-label">生命</span>
+            <div class="bar-track">
+              <div class="bar-ghost hp-enemy-ghost" style="width:${eHpPct}%"></div>
+              <div class="bar-fill hp-enemy" style="width:${eHpPct}%"></div>
+            </div>
+            <span class="stat-num" id="enemy-hp-num"></span>
+          </div>
+          <div class="stat-bar-group">
+            <span class="stat-label">護盾</span>
+            <div class="bar-track">
+              <div class="bar-fill shield-fill" id="enemy-sh-fill" style="width:${eShPct}%"></div>
+            </div>
+            <span class="stat-num" id="enemy-sh-num"></span>
+          </div>
         </div>
-      </div>
-      <div class="stats-quad-row">
+        <div class="stats-quad-row" id="enemy-stats-quad"></div>`;
+    }
+
+    const $eTitle = document.getElementById("enemy-panel-title");
+    if ($eTitle) $eTitle.innerHTML = `敵人：${colorize(escapeHtml(enemy.name))}`;
+    const $eTag = document.getElementById("enemy-panel-tag");
+    if ($eTag) $eTag.textContent = weakNote;
+
+    $eHpFill = $enemyPanel.querySelector(".bar-fill.hp-enemy");
+    const $eHpGhost = $enemyPanel.querySelector(".bar-ghost.hp-enemy-ghost");
+    const $eShFill = document.getElementById("enemy-sh-fill");
+
+    if ($eHpGhost && $eHpFill) {
+      if (isEnemyHealing) {
+        $eHpGhost.classList.add("instant");
+        $eHpGhost.style.width = eHpPct + "%";
+        $eHpFill.style.width = eHpPct + "%";
+      } else {
+        $eHpGhost.classList.remove("instant");
+        $eHpFill.style.width = eHpPct + "%";
+        $eHpGhost.style.width = eHpPct + "%";
+      }
+    }
+    if ($eShFill) {
+      $eShFill.style.width = eShPct + "%";
+    }
+
+    const $eHpNum = document.getElementById("enemy-hp-num");
+    if ($eHpNum) $eHpNum.textContent = `${eHpCur} / ${enemy.maxHp}`;
+    const $eShNum = document.getElementById("enemy-sh-num");
+    if ($eShNum) $eShNum.textContent = `${eShCur} / ${eShMax}`;
+
+    const $eQuad = document.getElementById("enemy-stats-quad");
+    if ($eQuad) {
+      $eQuad.innerHTML = `
         <div class="stat-cell">物攻 <span class="val">${enemy.physAtk}</span></div>
         <div class="stat-cell">物防 ${pDefHtml}</div>
         <div class="stat-cell">魔攻 <span class="val">${enemy.magAtk}</span></div>
-        <div class="stat-cell">魔防 ${mDefHtml}</div>
-      </div>`;
+        <div class="stat-cell">魔防 ${mDefHtml}</div>`;
+    }
+
     $enemyPanel.classList.remove("hidden");
   } else if ($enemyPanel) {
+    lastRenderedEnemyRef = null;
     $enemyPanel.classList.add("hidden");
   }
+}
+
+/* ===== 第九版新增：裝備紫色文字縮小消失動畫（2.5 秒無二次閃退）與全螢幕文字轉場 ===== */
+async function playEquipTextAnim(char) {
+  const $ov = document.getElementById("equip-anim-overlay");
+  if (!$ov) return;
+  const $char = $ov.querySelector(".equip-anim-char");
+  if ($char) $char.textContent = char;
+  $ov.classList.remove("hidden", "animating");
+  void $ov.offsetWidth;
+  $ov.classList.add("show", "animating");
+  await sleep(2500);
+  // 先僅移除 show 讓背景平滑淡出，保留 animating 讓文字維持在縮小至 0 的終點狀態，絕不二次閃現
+  $ov.classList.remove("show");
+  await sleep(300);
+  $ov.classList.remove("animating");
+  $ov.classList.add("hidden");
+}
+
+async function playFadeOutTextScreen(text, color = "#ffd23f", withScanline = false, durationMs = 2800) {
+  const $ov = document.getElementById("text-fade-overlay");
+  if (!$ov) return;
+  const $cnt = $ov.querySelector(".fade-content");
+  if ($cnt) {
+    $cnt.textContent = text;
+    $cnt.style.color = color;
+  }
+  $ov.style.setProperty("--fade-text-ms", durationMs + "ms");
+  $ov.classList.remove("hidden", "animating", "with-scanline");
+  if (withScanline) $ov.classList.add("with-scanline");
+  void $ov.offsetWidth;
+  $ov.classList.add("show", "animating");
+  await sleep(durationMs);
+  $ov.classList.remove("show");
+  await sleep(300);
+  $ov.classList.remove("animating", "with-scanline");
+  $ov.classList.add("hidden");
 }
 
 /* ===== 擲骰、抽撲克牌、戰鬥拉簾對話框與戰鬥效果動畫 ===== */
@@ -557,7 +689,7 @@ async function closeBattleDrawerAnim() {
   }
 }
 
-async function rollPokerAnim(who, color, card, note) {
+async function rollPokerAnim(who, color, card, note, specialPrompt = "") {
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const $who = $pokerDraw.querySelector(".who");
   const $stage = $pokerDraw.querySelector(".stage-label");
@@ -569,7 +701,10 @@ async function rollPokerAnim(who, color, card, note) {
 
   $who.innerHTML = colorize(escapeHtml(who)) + " 抽撲克牌";
   $who.style.color = color || "#e8e8e8";
-  $note.innerHTML = colorize(escapeHtml(note || ""));
+
+  // 第九版更新：抽牌動畫完結前撲克下方不提前顯示提示
+  $note.innerHTML = "";
+
   $badge.textContent = "";
   $drawnFront.innerHTML = renderPokerCardHtml(card);
   $drawnWrap.style.setProperty("--poker-draw-ms", POKER_DRAW_MS + "ms");
@@ -594,6 +729,13 @@ async function rollPokerAnim(who, color, card, note) {
   const hint = isLetter ? `（${card.rank} 代表數字 ${card.value}）` : `（點數 ${card.value}）`;
   $stage.textContent = "抽牌結果";
   $badge.textContent = `抽中：${card.suit.name} ${card.label} ${hint}`;
+
+  // 第九版更新：抽牌動畫完結後才顯示特殊效果提示（支援雙行並列），並在此定格停留 1 秒（POKER_HOLD_MS）
+  if (specialPrompt) {
+    $note.innerHTML = `<span class="poker-special-hint">${specialPrompt}</span>`;
+  } else {
+    $note.innerHTML = "";
+  }
 
   await sleep(POKER_HOLD_MS);
   $pokerDraw.classList.remove("show");
@@ -638,17 +780,53 @@ async function bossAppearAnim() {
   $b.classList.remove("show");
 }
 
-async function storyTextAnim(text) {
+// 第八版更新：魔王過場文字停留5秒，並支援點擊螢幕任意處或按鍵立即跳過該段文字前往下一段
+async function storyTextAnim(text, customDuration = STORY_BOSS_LINE_MS) {
   const $t = document.querySelector("#story .text");
   $t.innerHTML = colorize(escapeHtml(text));
-  const total = STORY_SHOW_MS + STORY_HOLD_MS + STORY_FADE_MS;
-  const a = $t.animate([
-    { opacity: 0, offset: 0 },
-    { opacity: 1, offset: STORY_SHOW_MS / total },
-    { opacity: 1, offset: (STORY_SHOW_MS + STORY_HOLD_MS) / total },
-    { opacity: 0, offset: 1 },
-  ], { duration: total, easing: "ease-in-out", fill: "forwards" });
-  await a.finished;
+
+  const total = customDuration;
+  const showRatio = 0.08;
+  const holdRatio = 0.84;
+
+  return new Promise((resolve) => {
+    let finished = false;
+    let anim = null;
+
+    const cleanup = () => {
+      if (finished) return;
+      finished = true;
+      window.removeEventListener("pointerdown", onSkip, true);
+      window.removeEventListener("keydown", onSkip, true);
+      if (anim) {
+        try { anim.cancel(); } catch (e) {}
+      }
+      $t.style.opacity = "0";
+      resolve();
+    };
+
+    const onSkip = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      cleanup();
+    };
+
+    window.addEventListener("pointerdown", onSkip, { capture: true, once: true });
+    window.addEventListener("keydown", onSkip, { capture: true, once: true });
+
+    anim = $t.animate([
+      { opacity: 0, offset: 0 },
+      { opacity: 1, offset: showRatio },
+      { opacity: 1, offset: holdRatio },
+      { opacity: 0, offset: 1 },
+    ], { duration: total, easing: "ease-in-out", fill: "forwards" });
+
+    anim.finished.then(() => {
+      cleanup();
+    }).catch(() => {
+      cleanup();
+    });
+  });
 }
 
 async function storyBg(from, to, ms) {
@@ -705,9 +883,35 @@ async function playDefeatText(customLines) {
 
 async function swordAnim() {
   const $sword = document.getElementById("sword");
-  replayClass($sword, "show");
+  if ($sword) {
+    replayClass($sword, "show");
+    await sleep(SWORD_MS);
+    $sword.classList.remove("show");
+  }
+}
+
+// 第八版新增：在敵人面板上劈一刀動畫
+async function enemyPanelSlashAnim() {
+  const $ep = document.getElementById("enemy-panel");
+  if (!$ep) return;
+  replayClass($ep, "slash-hit");
   await sleep(SWORD_MS);
-  $sword.classList.remove("show");
+  $ep.classList.remove("slash-hit");
+}
+
+// 第八版新增：敵人面板受擊閃光（實質扣HP閃紅光，護盾抵扣或0傷閃金光）
+async function enemyHitAnim(lostHp) {
+  const $ep = document.getElementById("enemy-panel");
+  if (!$ep) return;
+  $ep.classList.remove("glow-gold", "glow-red");
+  void $ep.offsetWidth;
+  if (lostHp) {
+    replayClass($ep, "glow-red");
+  } else {
+    replayClass($ep, "glow-gold");
+  }
+  await sleep(HIT_MS);
+  $ep.classList.remove("glow-gold", "glow-red");
 }
 
 async function heroHitAnim(lostHp) {
@@ -780,6 +984,9 @@ function newGame(selectedMode) {
   if ($battleLog) $battleLog.innerHTML = "";
   closeHistoryModal();
   closeTesterModal();
+  lastHeroHp = HERO_BASE.hp;
+  lastEnemyHp = null;
+  lastRenderedEnemyRef = null;
 
   hero = {
     hp: HERO_BASE.hp,
@@ -822,7 +1029,7 @@ function presentRound() {
           label: `【傳送門 + 寶箱】開啟第 ${floor} 層跨層寶箱並前往第 ${floor + 1} 層`,
           action: () => {
             turn++;
-            openFloorChest();
+            triggerPortalChestFlow();
           },
         },
       ]);
@@ -897,12 +1104,61 @@ function camp(isSkillPlaceholder) {
   setChoices([{ label: "繼續前進", action: advanceAfterEvent }]);
 }
 
-/* ===== 第 6 回合：跨層寶箱與傳送門推進（每過一層清空一般對話框） ===== */
-function openFloorChest() {
+/* ===== 第 6 回合：跨層寶箱與傳送門完整動畫鏈（第九版升級，延長開箱 2.8 秒與傳送門 3.0 秒） ===== */
+async function triggerPortalChestFlow() {
+  setChoices([]); // 禁用點擊防跳過
+
+  // 1. 播放開寶箱全螢幕文字動畫（延長至 2.8 秒，變暗＋黃字淡出）
+  await playFadeOutTextScreen("古老的寶箱緩緩開啟...", "#ffd23f", false, 2800);
+
+  // 2. 開出秘寶並顯示於 log 中
   const pool = FLOOR_CHEST_ITEMS[floor] || FLOOR_CHEST_ITEMS[1];
   const item = randomPick(pool);
   log(`你打開了第 ${floor} 層的跨層寶箱，從 4 件秘寶中抽出了${SLOT_NAME[item.slot]}：${itemText(item)}！`, "big");
-  offerItem(item, enterNextFloorPortal);
+
+  // 3. 詢問玩家是否替換裝備
+  const old = hero.equip[item.slot];
+  log(`目前的${SLOT_NAME[item.slot]}：${itemText(old)}。`, "dim");
+  renderStatus();
+
+  setChoices([
+    {
+      label: old ? `替換 ${item.name}（替換掉 ${old.name}）` : `裝備 ${item.name}`,
+      action: async () => {
+        setChoices([]);
+        hero.equip[item.slot] = item;
+        log(`你裝備了 ${itemText(item)}。`);
+        if (item.textDesc) {
+          log(`「${item.textDesc}」`, "text-curse");
+        } else {
+          log(`「${SLOT_NAME[item.slot]}部位變爲文字了.....但是獲得了更強的力量。」`, "text-curse");
+        }
+        renderStatus();
+
+        // 4. 若替換，播放裝備紫色「x」字縮小淡出動畫（2.5 秒無二次閃退）
+        const match = (item.textDesc && !item.isHeroSword && !item.isTesterItem)
+          ? item.textDesc.match(/「(.)」/)
+          : null;
+        if (match) {
+          await playEquipTextAnim(match[1]);
+        }
+
+        // 5. 播放傳送門全螢幕文字動畫（延長至 3.0 秒，變暗＋黃字淡出＋白色掃描線雙重閃爍）
+        await playFadeOutTextScreen("踏入扭曲的原典傳送門...", "#ffd23f", true, 3000);
+        enterNextFloorPortal();
+      }
+    },
+    {
+      label: "不要，保留現有裝備",
+      action: async () => {
+        setChoices([]);
+        log(`你放棄了 ${item.name}。`);
+        // 放棄更換時直接播放傳送門動畫（3.0 秒）
+        await playFadeOutTextScreen("踏入扭曲的原典傳送門...", "#ffd23f", true, 3000);
+        enterNextFloorPortal();
+      }
+    }
+  ]);
 }
 
 function enterNextFloorPortal() {
@@ -929,7 +1185,8 @@ function offerItem(item, onDone) {
   setChoices([
     {
       label: old ? `拾取 ${item.name}（替換掉 ${old.name}）` : `拾取 ${item.name}`,
-      action: () => {
+      action: async () => {
+        setChoices([]);
         hero.equip[item.slot] = item;
         log(`你裝備了 ${itemText(item)}。`);
         if (item.textDesc) {
@@ -938,6 +1195,14 @@ function offerItem(item, onDone) {
           log(`「${SLOT_NAME[item.slot]}部位變爲文字了.....但是獲得了更強的力量。」`, "text-curse");
         }
         renderStatus();
+
+        // 第九版新增：抓取引號中的「x」字進行紫色文字縮小消失動畫（延長至 2.5 秒且無二次閃現）
+        const match = (item.textDesc && !item.isHeroSword && !item.isTesterItem)
+          ? item.textDesc.match(/「(.)」/)
+          : null;
+        if (match) {
+          await playEquipTextAnim(match[1]);
+        }
         onDone();
       },
     },
@@ -1003,7 +1268,8 @@ async function startBattle(template) {
     const baseMirrorMagAtk = mirror.magAtk + PHASE2_BOSS_BONUS_ATK;
     const baseMirrorPhysDef = mirror.physDef + PHASE2_BOSS_BONUS_DEF;
     const baseMirrorMagDef = mirror.magDef + PHASE2_BOSS_BONUS_DEF;
-    enemy = {
+    lastEnemyHp = template.hp;
+  enemy = {
       name: template.name,
       trueName: template.trueName,
       type: "chaos",
@@ -1090,20 +1356,18 @@ async function startBattle(template) {
     lastDrawnCard = card;
     r = card.value;
     await rollPokerAnim("先攻判定", null, card, "單數(A,3,5,7,9,J,K)＝勇者先攻／雙數＝" + enemy.name + "先攻");
-    if (r % 2 === 1) {
-      log(`先攻抽牌：${card.fullLabel}（代表點數 ${r}，單數），勇者先攻。`);
-    } else {
-      log(`先攻抽牌：${card.fullLabel}（代表點數 ${r}，雙數），${enemy.name}先攻。`);
+    const isHeroFirst = (r % 2 === 1);
+    log(`先攻抽牌：${card.fullLabel}，${isHeroFirst ? "單數，勇者先攻！" : "雙數，" + enemy.name + "先攻！"}`);
+    if (!isHeroFirst) {
       await enemyAttack();
       if (!enemy || hero.hp <= 0) return;
     }
   } else {
     r = rollD20();
     await rollDiceAnim("先攻判定", null, r, "單數＝勇者先攻／雙數＝" + enemy.name + "先攻");
-    if (r % 2 === 1) {
-      log(`先攻骰：${r}（單數），勇者先攻。`);
-    } else {
-      log(`先攻骰：${r}（雙數），${enemy.name}先攻。`);
+    const isHeroFirst = (r % 2 === 1);
+    log(`先攻骰：${r}，${isHeroFirst ? "單數，勇者先攻！" : "雙數，" + enemy.name + "先攻！"}`);
+    if (!isHeroFirst) {
       await enemyAttack();
       if (!enemy || hero.hp <= 0) return;
     }
@@ -1175,9 +1439,9 @@ function dealDamage(attackerName, atkType, atk, def, target, dice, cardInfo) {
     tags.push(`${isBlackSuit ? "黑花色物攻" : "紅花色魔攻"}+${suitBonus}`);
   }
   if (isAce) {
-    tags.push("王牌A：無視50%防禦＋無視護盾");
+    tags.push("A：無視護盾與部分防禦");
   } else if (isKing) {
-    tags.push("老K：無視護盾");
+    tags.push("K：無視護盾");
   }
   const tagStr = tags.length > 0 ? `［${tags.join("｜")}］` : "";
 
@@ -1210,23 +1474,49 @@ async function heroAttack(atkType) {
     : `物攻 ${atkVal} + ${rollWord} − 物防 ${defVal}`;
 
   let dice, drawnCard = null;
+  let pokerSpecialPrompt = "";
+
   if (gameMode === "poker") {
     drawnCard = drawPokerCard();
     lastDrawnCard = drawnCard;
     dice = drawnCard.value;
-    await rollPokerAnim("勇者", HERO_COLOR, drawnCard, labelNote);
+
+    // 第八版：黑色花色+物攻、紅色花色+魔攻套用於所有數字（含JQKA）
+    const isBlackSuit = (drawnCard.suit.key === "S" || drawnCard.suit.key === "C");
+    const suitMatched = (atkType === "phys" && isBlackSuit) || (atkType === "mag" && !isBlackSuit);
+    const suitText = suitMatched ? (atkType === "phys" ? "物攻暫時增加！" : "魔攻暫時增加！") : "";
+
+    let rankText = "";
+    if (drawnCard.rank === "K") {
+      rankText = "【K】無視護盾！";
+    } else if (drawnCard.rank === "A") {
+      rankText = "【A】無視護盾與部分防禦！";
+    }
+
+    // 第九版更新：抽牌提示分行顯示（第一行花色加攻，第二行A/K特殊效果）
+    const promptLines = [suitText, rankText].filter(Boolean);
+    pokerSpecialPrompt = promptLines.join("<br>");
+    await rollPokerAnim("勇者", HERO_COLOR, drawnCard, labelNote, pokerSpecialPrompt);
   } else {
     dice = rollD20();
     await rollDiceAnim("勇者", HERO_COLOR, dice, labelNote);
   }
-  await swordAnim();
 
+  // 第九版更新：預先計算傷害結果，劈刀命中瞬間（約 150ms）同步觸發受擊紅/金光閃爍與動態血條/殘影縮減
+  const enemyHpBefore = enemy.hp;
   const heroTarget = { shield: enemy.shield, hp: enemy.hp };
   const report = dealDamage("勇者", atkType, atkVal, defVal, heroTarget, dice, drawnCard);
-  logCombatReport(true, report.mainLine, report.formulaLine);
+  const enemyLostHp = heroTarget.hp < enemyHpBefore;
+
+  const slashP = enemyPanelSlashAnim();
+  await sleep(150);
   enemy.shield = heroTarget.shield;
   enemy.hp = heroTarget.hp;
   renderStatus();
+  logCombatReport(true, report.mainLine, report.formulaLine);
+  const hitP = enemyHitAnim(enemyLostHp);
+  await Promise.all([slashP, hitP]);
+  await sleep(320);
 
   // 二階段：勇者第一次攻擊後的專屬台詞（半血前 enemy.name 為 @$+%^&¥，完全不出現真魔王或沙坦）
   if (enemy.isPhase2Boss && !enemy.firstAttackDone) {
@@ -1319,7 +1609,7 @@ async function enemyAttack() {
     drawnCard = drawPokerCard();
     lastDrawnCard = drawnCard;
     dice = drawnCard.value;
-    await rollPokerAnim(enemy.name, ENEMY_COLORS[enemy.name], drawnCard, labelNote);
+    await rollPokerAnim(enemy.name, ENEMY_COLORS[enemy.name], drawnCard, labelNote, "");
   } else {
     dice = rollD20();
     await rollDiceAnim(enemy.name, ENEMY_COLORS[enemy.name], dice, labelNote);
@@ -1378,11 +1668,10 @@ async function enemyAttack() {
 
 async function winBattle() {
   setChoices([]);
-  // 先播放「從底部收回戰鬥對話框」動畫，使後續劇情與掉寶回到外層一般對話框
-  await closeBattleDrawerAnim();
 
-  // 一階段魔王被擊敗：此時勇者才發現魔王的真實身分是「前勇者」！
+  // 一階段魔王被擊敗：收回戰鬥拉簾並進入前勇者真相過場
   if (enemy.isBoss) {
+    await closeBattleDrawerAnim();
     enemy = null;
     renderStatus();
 
@@ -1425,8 +1714,9 @@ async function winBattle() {
     return;
   }
 
-  // 二階段（文字.沙坦）被擊敗：演出 4 句勝利結局文字消失動畫
+  // 二階段（文字.沙坦）被擊敗：收回戰鬥拉簾並演出 4 句勝利結局文字消失動畫
   if (enemy.isPhase2Boss) {
+    await closeBattleDrawerAnim();
     enemy = null;
     renderStatus();
     sep();
@@ -1442,14 +1732,40 @@ async function winBattle() {
     return;
   }
 
+  // 第九版更新（常規小怪擊敗）：
+  // 保留敵人面板在 0 HP 狀態讓玩家看清血條歸零與白色殘影，先播放全螢幕黃字文字消失轉場（2.2秒），結束後回到戰鬥框顯示「繼續前進」按鈕
   const defeatedEnemy = enemy;
-  enemy = null;
-  renderStatus();
+  const isNarrowVictory = hero.hp < (hero.maxHp * 0.25);
+  const defeatMsg = isNarrowVictory ? `險勝${defeatedEnemy.name}….` : `打敗${defeatedEnemy.name}了`;
 
-  log(`你打倒了${defeatedEnemy.name}！`, "big");
-  const drop = randomPick(defeatedEnemy.items);
-  log(`${defeatedEnemy.name}掉落了一件${SLOT_NAME[drop.slot]}：${itemText(drop)}。`);
-  offerItem(drop, advanceAfterEvent);
+  // 播放全螢幕黃字文字消失轉場動畫
+  await playFadeOutTextScreen(defeatMsg, "#ffd23f", false, 2200);
+
+  // 在戰鬥日誌最下方加上獲勝提示卡片
+  if ($battleLog) {
+    const vDiv = document.createElement("div");
+    vDiv.className = "combat-report victory-report";
+    vDiv.innerHTML = `<div class="line-main" style="color: #ffd23f; font-weight: bold; font-size: 15px;">${escapeHtml(defeatMsg)}</div>`;
+    $battleLog.appendChild(vDiv);
+    $battleLog.scrollTop = $battleLog.scrollHeight;
+  }
+
+  // 轉場完結後回到戰鬥對話框，顯示「繼續前進」按鈕
+  setChoices([
+    {
+      label: "繼續前進",
+      action: async () => {
+        setChoices([]);
+        enemy = null;
+        renderStatus();
+        await closeBattleDrawerAnim();
+        log(defeatMsg, "big");
+        const drop = randomPick(defeatedEnemy.items);
+        log(`${defeatedEnemy.name}掉落了一件${SLOT_NAME[drop.slot]}：${itemText(drop)}。`);
+        offerItem(drop, advanceAfterEvent);
+      }
+    }
+  ]);
 }
 
 function loseGame() {

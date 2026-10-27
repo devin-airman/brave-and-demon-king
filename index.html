@@ -82,14 +82,21 @@
 </div>
 
 <!-- 劇情文字動畫 -->
-<div id="story" aria-live="polite"><div class="text"></div></div>
+<div id="story" aria-live="polite"><div class="text"></div><div class="skip-hint">（點擊任意處可跳過）</div></div>
 
+<!-- 轉場用的黑幕 -->
 <!-- 轉場用的黑幕 -->
 <div id="fade"><div class="scan"></div></div>
 
+<!-- 第九版新增：裝備文字縮小消失動畫（紫色） -->
+<div id="equip-anim-overlay" class="hidden" aria-hidden="true"><div class="equip-anim-char"></div></div>
+
+<!-- 第九版新增：全螢幕文字消失轉場（黃色）與傳送門掃描線動畫 -->
+<div id="text-fade-overlay" class="hidden" aria-hidden="true"><div class="fade-content"></div><div class="fade-scanline"></div></div>
+
 <div id="game" class="hidden">
   <div id="status"></div>
-  <div id="enemy-panel" class="hidden"></div>
+  <div id="enemy-panel" class="hidden"><div class="enemy-panel-slash" aria-hidden="true"></div></div>
   <div id="dialogue-stage">
     <div id="log" aria-live="polite"></div>
     <div id="battle-intro-overlay" aria-hidden="true">
