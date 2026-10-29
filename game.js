@@ -8,6 +8,8 @@
 let hero, floor, round, turn, floorDeck, enemy, gameOver;
 let lastHeroHp = HERO_BASE.hp;
 let lastEnemyHp = null;
+let lastHeroShield = 0;
+let lastEnemyShield = null;
 let lastRenderedEnemyRef = null;
 let gameMode = "dice"; // "dice" (0–20 骰子模式) 或 "poker" (1–13 撲克模式)
 let lastDrawnCard = null; // 紀錄最近一次抽出的撲克牌資訊
@@ -63,6 +65,78 @@ function colorize(html) {
 }
 
 // 將 #rrggbb 色碼轉為 rgba 字串，供敵人對戰卡外框微光使用
+// 第十版（v10）新增：生成護盾特效內部圖層（敵人面板與勇者中間對話框共用，無文字提示）
+function buildShieldFxLayerHtml(isDialogue) {
+  const shardConfigs = isDialogue
+    ? [
+        { sx: "24%", sy: "28%", sw: "16px", sh: "18px", tx: "-110px", ty: "-65px", rot: "-145deg" },
+        { sx: "38%", sy: "24%", sw: "14px", sh: "16px", tx: "-45px",  ty: "-80px", rot: "120deg" },
+        { sx: "52%", sy: "30%", sw: "18px", sh: "20px", tx: "20px",   ty: "-85px", rot: "165deg" },
+        { sx: "68%", sy: "26%", sw: "15px", sh: "17px", tx: "95px",   ty: "-70px", rot: "-130deg" },
+        { sx: "80%", sy: "34%", sw: "13px", sh: "15px", tx: "125px",  ty: "-35px", rot: "140deg" },
+        { sx: "22%", sy: "52%", sw: "15px", sh: "17px", tx: "-120px", ty: "10px",  rot: "-160deg" },
+        { sx: "42%", sy: "48%", sw: "19px", sh: "22px", tx: "-65px",  ty: "-25px", rot: "135deg" },
+        { sx: "58%", sy: "50%", sw: "18px", sh: "21px", tx: "70px",   ty: "-20px", rot: "-115deg" },
+        { sx: "76%", sy: "54%", sw: "15px", sh: "17px", tx: "130px",  ty: "20px",  rot: "175deg" },
+        { sx: "28%", sy: "74%", sw: "14px", sh: "16px", tx: "-95px",  ty: "75px",  rot: "-110deg" },
+        { sx: "45%", sy: "70%", sw: "17px", sh: "19px", tx: "-30px",  ty: "88px",  rot: "150deg" },
+        { sx: "56%", sy: "72%", sw: "16px", sh: "18px", tx: "45px",   ty: "85px",  rot: "-140deg" },
+        { sx: "72%", sy: "74%", sw: "14px", sh: "16px", tx: "105px",  ty: "72px",  rot: "125deg" },
+        { sx: "62%", sy: "40%", sw: "13px", sh: "15px", tx: "85px",   ty: "-50px", rot: "-95deg" },
+      ]
+    : [
+        { sx: "32%", sy: "45%", sw: "13px", sh: "15px", tx: "-68px", ty: "-42px", rot: "-140deg" },
+        { sx: "42%", sy: "38%", sw: "10px", sh: "12px", tx: "-35px", ty: "-55px", rot: "110deg" },
+        { sx: "50%", sy: "50%", sw: "15px", sh: "16px", tx: "12px",  ty: "-60px", rot: "165deg" },
+        { sx: "62%", sy: "42%", sw: "12px", sh: "14px", tx: "58px",  ty: "-46px", rot: "-125deg" },
+        { sx: "74%", sy: "48%", sw: "11px", sh: "13px", tx: "82px",  ty: "-22px", rot: "145deg" },
+        { sx: "36%", sy: "62%", sw: "12px", sh: "11px", tx: "-62px", ty: "38px",  rot: "-160deg" },
+        { sx: "48%", sy: "65%", sw: "14px", sh: "14px", tx: "-18px", ty: "54px",  rot: "130deg" },
+        { sx: "58%", sy: "60%", sw: "11px", sh: "15px", tx: "36px",  ty: "52px",  rot: "-115deg" },
+        { sx: "70%", sy: "62%", sw: "13px", sh: "12px", tx: "76px",  ty: "36px",  rot: "175deg" },
+        { sx: "82%", sy: "52%", sw: "10px", sh: "12px", tx: "92px",  ty: "12px",  rot: "-95deg" },
+      ];
+  const shardsHtml = shardConfigs.map(c =>
+    `<div class="ice-shard" style="--sx:${c.sx};--sy:${c.sy};--sw:${c.sw};--sh:${c.sh};--tx:${c.tx};--ty:${c.ty};--rot:${c.rot};"></div>`
+  ).join("");
+  const svgHtml = isDialogue
+    ? `<svg class="shield-crack-svg" viewBox="0 0 600 220" preserveAspectRatio="none">
+         <path d="M300,0 L275,58 L185,95 L268,140 L235,220 M275,58 L385,42 L465,105 M268,140 L375,165 L435,220 M185,95 L85,52 M185,95 L115,175 M385,42 L515,18" fill="none" stroke="#aef6ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+         <path d="M300,0 L328,72 L415,112 L318,168 L345,220 M415,112 L530,145" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-dasharray="6 3"/>
+       </svg>`
+    : `<svg class="shield-crack-svg" viewBox="0 0 400 100" preserveAspectRatio="none">
+         <path d="M195,0 L210,30 L265,42 L205,62 L225,100 M210,30 L155,20 L115,48 M205,62 L150,74 L120,98 M265,42 L310,22 M265,42 L298,82" fill="none" stroke="#aef6ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+         <path d="M195,0 L180,36 L142,52 L188,75 L175,100" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-dasharray="4 2"/>
+       </svg>`;
+  const layerId = isDialogue ? ' id="dialogue-fx-layer"' : "";
+  return `<div class="shield-fx-layer"${layerId} aria-hidden="true"><div class="shield-wave-sweep"></div><div class="shield-hex-barrier"></div>${svgHtml}<div class="ice-shards-container">${shardsHtml}</div></div>`;
+}
+
+function ensureDialogueShieldFxLayer() {
+  if (!$dialogueStage) return;
+  if (!document.getElementById("dialogue-fx-layer")) {
+    $dialogueStage.insertAdjacentHTML("afterbegin", buildShieldFxLayerHtml(true));
+  }
+}
+
+// 第十版（v10）新增：統一產生勇者與敵人的撲克牌面下方特殊效果提示（選項 A：花色加攻 ＋ K/A 穿盾雙行提示）
+function buildPokerSpecialPrompt(atkType, drawnCard) {
+  if (!drawnCard) return "";
+  const isBlackSuit = (drawnCard.suit.key === "S" || drawnCard.suit.key === "C");
+  const suitMatched = (atkType === "phys" && isBlackSuit) || (atkType === "mag" && !isBlackSuit);
+  const suitText = suitMatched ? (atkType === "phys" ? "物攻暫時增加！" : "魔攻暫時增加！") : "";
+
+  let rankText = "";
+  if (drawnCard.rank === "K") {
+    rankText = "【K】無視護盾！";
+  } else if (drawnCard.rank === "A") {
+    rankText = "【A】無視護盾與部分防禦！";
+  }
+
+  const promptLines = [suitText, rankText].filter(Boolean);
+  return promptLines.join("<br>");
+}
+
 function hexToRgba(hex, alpha) {
   const clean = String(hex || "#ff5c5c").replace("#", "");
   if (clean.length !== 6) return `rgba(255, 92, 92, ${alpha})`;
@@ -384,7 +458,10 @@ function renderStatus() {
   const hpPct = hero.maxHp > 0 ? Math.max(0, Math.min(100, (hpCur / hero.maxHp) * 100)) : 0;
   const isHeroHealing = (lastHeroHp !== null && hero.hp >= lastHeroHp);
   lastHeroHp = hero.hp;
-  const shPct = maxShield > 0 ? Math.max(0, Math.min(100, (Math.max(0, curShield) / maxShield) * 100)) : 0;
+  const shCur = Math.max(0, curShield);
+  const isHeroShieldGain = (lastHeroShield !== null && shCur >= lastHeroShield);
+  lastHeroShield = shCur;
+  const shPct = maxShield > 0 ? Math.max(0, Math.min(100, (shCur / maxShield) * 100)) : 0;
 
   const fInfo = getFloorInfo(floor);
   const modeTag = gameMode === "poker" ? "［撲克模式］" : "［骰子模式］";
@@ -419,7 +496,8 @@ function renderStatus() {
         </div>
         <div class="stat-bar-group">
           <span class="stat-label">護盾</span>
-          <div class="bar-track">
+          <div class="bar-track" id="hero-sh-track">
+            <div class="bar-ghost shield-ghost hp-hero-sh-ghost" style="width:${shPct}%"></div>
             <div class="bar-fill shield-fill" id="hero-sh-fill" style="width:${shPct}%"></div>
           </div>
           <span class="stat-num" id="hero-sh-num"></span>
@@ -465,7 +543,18 @@ function renderStatus() {
       $heroHpGhost.style.width = hpPct + "%";
     }
   }
-  if ($heroShFill) {
+  const $heroShGhost = $status.querySelector(".bar-ghost.hp-hero-sh-ghost");
+  if ($heroShGhost && $heroShFill) {
+    if (isHeroShieldGain) {
+      $heroShGhost.classList.add("instant");
+      $heroShGhost.style.width = shPct + "%";
+      $heroShFill.style.width = shPct + "%";
+    } else {
+      $heroShGhost.classList.remove("instant");
+      $heroShFill.style.width = shPct + "%";
+      $heroShGhost.style.width = shPct + "%";
+    }
+  } else if ($heroShFill) {
     $heroShFill.style.width = shPct + "%";
   }
 
@@ -518,6 +607,8 @@ function renderStatus() {
     lastEnemyHp = enemy.hp;
     const eShMax = enemy.maxShield || 0;
     const eShCur = Math.max(0, enemy.shield);
+    const isEnemyShieldGain = (lastEnemyShield !== null && eShCur >= lastEnemyShield);
+    lastEnemyShield = eShCur;
     const eShPct = eShMax > 0 ? Math.max(0, Math.min(100, (eShCur / eShMax) * 100)) : 0;
 
     const pDefHtml = enemy.weakness === "phys"
@@ -532,6 +623,7 @@ function renderStatus() {
       lastRenderedEnemyRef = enemy;
       $enemyPanel.innerHTML = `
         <div class="enemy-panel-slash" aria-hidden="true"></div>
+        ${buildShieldFxLayerHtml(false)}
         <div class="panel-row-top">
           <div class="panel-title" id="enemy-panel-title"></div>
           <div class="enemy-tag" id="enemy-panel-tag"></div>
@@ -547,7 +639,8 @@ function renderStatus() {
           </div>
           <div class="stat-bar-group">
             <span class="stat-label">護盾</span>
-            <div class="bar-track">
+            <div class="bar-track" id="enemy-sh-track">
+              <div class="bar-ghost shield-ghost hp-enemy-sh-ghost" style="width:${eShPct}%"></div>
               <div class="bar-fill shield-fill" id="enemy-sh-fill" style="width:${eShPct}%"></div>
             </div>
             <span class="stat-num" id="enemy-sh-num"></span>
@@ -576,7 +669,18 @@ function renderStatus() {
         $eHpGhost.style.width = eHpPct + "%";
       }
     }
-    if ($eShFill) {
+    const $eShGhost = $enemyPanel.querySelector(".bar-ghost.hp-enemy-sh-ghost");
+    if ($eShGhost && $eShFill) {
+      if (isEnemyShieldGain) {
+        $eShGhost.classList.add("instant");
+        $eShGhost.style.width = eShPct + "%";
+        $eShFill.style.width = eShPct + "%";
+      } else {
+        $eShGhost.classList.remove("instant");
+        $eShFill.style.width = eShPct + "%";
+        $eShGhost.style.width = eShPct + "%";
+      }
+    } else if ($eShFill) {
       $eShFill.style.width = eShPct + "%";
     }
 
@@ -899,35 +1003,66 @@ async function enemyPanelSlashAnim() {
   $ep.classList.remove("slash-hit");
 }
 
-// 第八版新增：敵人面板受擊閃光（實質扣HP閃紅光，護盾抵扣或0傷閃金光）
-async function enemyHitAnim(lostHp) {
+// 第十版（v10）升級：敵人面板受擊反饋（護盾破碎 ➔ shatter-ice-shield；護盾完全擋下 ➔ glow-ice-shield；扣HP ➔ glow-red；0傷防禦 ➔ glow-gold）
+async function enemyHitAnim(lostHp, shieldState = "none") {
   const $ep = document.getElementById("enemy-panel");
   if (!$ep) return;
-  $ep.classList.remove("glow-gold", "glow-red");
+  const $eShTrack = document.getElementById("enemy-sh-track");
+  $ep.classList.remove("glow-gold", "glow-red", "glow-ice-shield", "shatter-ice-shield");
+  if ($eShTrack) $eShTrack.classList.remove("shield-track-glow", "shield-track-shatter");
   void $ep.offsetWidth;
-  if (lostHp) {
+
+  let waitMs = HIT_MS;
+  if (shieldState === "shatter") {
+    replayClass($ep, "shatter-ice-shield");
+    if ($eShTrack) replayClass($eShTrack, "shield-track-shatter");
+    waitMs = 760;
+  } else if (shieldState === "block") {
+    replayClass($ep, "glow-ice-shield");
+    if ($eShTrack) replayClass($eShTrack, "shield-track-glow");
+    waitMs = 650;
+  } else if (lostHp) {
     replayClass($ep, "glow-red");
   } else {
     replayClass($ep, "glow-gold");
   }
-  await sleep(HIT_MS);
-  $ep.classList.remove("glow-gold", "glow-red");
+  await sleep(waitMs);
+  $ep.classList.remove("glow-gold", "glow-red", "glow-ice-shield", "shatter-ice-shield");
+  if ($eShTrack) $eShTrack.classList.remove("shield-track-glow", "shield-track-shatter");
 }
 
-async function heroHitAnim(lostHp) {
+// 第十版（v10）升級：勇者受擊反饋（作用於中間對話框 #dialogue-stage，與紅光／金光範圍完全一致）
+async function heroHitAnim(lostHp, shieldState = "none") {
   const $g = document.getElementById("game");
   const $box = $dialogueStage || $log;
-  $box.classList.remove("glow-gold", "glow-red");
+  const $hShTrack = document.getElementById("hero-sh-track");
+  ensureDialogueShieldFxLayer();
+
+  $box.classList.remove("glow-gold", "glow-red", "glow-ice-shield", "shatter-ice-shield");
   $g.classList.remove("shake");
-  if (lostHp) {
+  if ($hShTrack) $hShTrack.classList.remove("shield-track-glow", "shield-track-shatter");
+  void $box.offsetWidth;
+
+  let waitMs = HIT_MS;
+  if (shieldState === "shatter") {
+    replayClass($box, "shatter-ice-shield");
+    replayClass($g, "shake");
+    if ($hShTrack) replayClass($hShTrack, "shield-track-shatter");
+    waitMs = 760;
+  } else if (shieldState === "block") {
+    replayClass($box, "glow-ice-shield");
+    if ($hShTrack) replayClass($hShTrack, "shield-track-glow");
+    waitMs = 650;
+  } else if (lostHp) {
     replayClass($box, "glow-red");
     replayClass($g, "shake");
   } else {
     replayClass($box, "glow-gold");
   }
-  await sleep(HIT_MS);
-  $box.classList.remove("glow-gold", "glow-red");
+  await sleep(waitMs);
+  $box.classList.remove("glow-gold", "glow-red", "glow-ice-shield", "shatter-ice-shield");
   $g.classList.remove("shake");
+  if ($hShTrack) $hShTrack.classList.remove("shield-track-glow", "shield-track-shatter");
 }
 
 /* =========================================================
@@ -986,7 +1121,10 @@ function newGame(selectedMode) {
   closeTesterModal();
   lastHeroHp = HERO_BASE.hp;
   lastEnemyHp = null;
+  lastHeroShield = HERO_BASE.shield;
+  lastEnemyShield = null;
   lastRenderedEnemyRef = null;
+  ensureDialogueShieldFxLayer();
 
   hero = {
     hp: HERO_BASE.hp,
@@ -1324,6 +1462,9 @@ async function startBattle(template) {
 
   // 護盾每場戰鬥開始時刷新
   hero.shield = calcStats(HERO_BASE, hero.equip, true).shield;
+  lastHeroShield = hero.shield;
+  lastEnemyShield = enemy.shield;
+  ensureDialogueShieldFxLayer();
   setChoices([]);
   renderStatus();
 
@@ -1480,33 +1621,25 @@ async function heroAttack(atkType) {
     drawnCard = drawPokerCard();
     lastDrawnCard = drawnCard;
     dice = drawnCard.value;
-
-    // 第八版：黑色花色+物攻、紅色花色+魔攻套用於所有數字（含JQKA）
-    const isBlackSuit = (drawnCard.suit.key === "S" || drawnCard.suit.key === "C");
-    const suitMatched = (atkType === "phys" && isBlackSuit) || (atkType === "mag" && !isBlackSuit);
-    const suitText = suitMatched ? (atkType === "phys" ? "物攻暫時增加！" : "魔攻暫時增加！") : "";
-
-    let rankText = "";
-    if (drawnCard.rank === "K") {
-      rankText = "【K】無視護盾！";
-    } else if (drawnCard.rank === "A") {
-      rankText = "【A】無視護盾與部分防禦！";
-    }
-
-    // 第九版更新：抽牌提示分行顯示（第一行花色加攻，第二行A/K特殊效果）
-    const promptLines = [suitText, rankText].filter(Boolean);
-    pokerSpecialPrompt = promptLines.join("<br>");
+    pokerSpecialPrompt = buildPokerSpecialPrompt(atkType, drawnCard);
     await rollPokerAnim("勇者", HERO_COLOR, drawnCard, labelNote, pokerSpecialPrompt);
   } else {
     dice = rollD20();
     await rollDiceAnim("勇者", HERO_COLOR, dice, labelNote);
   }
 
-  // 第九版更新：預先計算傷害結果，劈刀命中瞬間（約 150ms）同步觸發受擊紅/金光閃爍與動態血條/殘影縮減
+  // 第九版／第十版更新：預先計算傷害結果，劈刀命中瞬間（約 150ms）同步觸發受擊紅/金/冰藍護盾光效或護盾破碎動畫
+  const enemyShieldBefore = enemy.shield;
   const enemyHpBefore = enemy.hp;
   const heroTarget = { shield: enemy.shield, hp: enemy.hp };
   const report = dealDamage("勇者", atkType, atkVal, defVal, heroTarget, dice, drawnCard);
   const enemyLostHp = heroTarget.hp < enemyHpBefore;
+  let enemyShieldState = "none";
+  if (enemyShieldBefore > 0 && heroTarget.shield === 0 && report.toShield > 0) {
+    enemyShieldState = "shatter";
+  } else if (report.toShield > 0 && !enemyLostHp && heroTarget.shield > 0) {
+    enemyShieldState = "block";
+  }
 
   const slashP = enemyPanelSlashAnim();
   await sleep(150);
@@ -1514,7 +1647,7 @@ async function heroAttack(atkType) {
   enemy.hp = heroTarget.hp;
   renderStatus();
   logCombatReport(true, report.mainLine, report.formulaLine);
-  const hitP = enemyHitAnim(enemyLostHp);
+  const hitP = enemyHitAnim(enemyLostHp, enemyShieldState);
   await Promise.all([slashP, hitP]);
   await sleep(320);
 
@@ -1609,12 +1742,14 @@ async function enemyAttack() {
     drawnCard = drawPokerCard();
     lastDrawnCard = drawnCard;
     dice = drawnCard.value;
-    await rollPokerAnim(enemy.name, ENEMY_COLORS[enemy.name], drawnCard, labelNote, "");
+    const enemyPokerPrompt = buildPokerSpecialPrompt(atkType, drawnCard);
+    await rollPokerAnim(enemy.name, ENEMY_COLORS[enemy.name], drawnCard, labelNote, enemyPokerPrompt);
   } else {
     dice = rollD20();
     await rollDiceAnim(enemy.name, ENEMY_COLORS[enemy.name], dice, labelNote);
   }
 
+  const heroShieldBefore = hero.shield;
   const target = { shield: hero.shield, hp: hero.hp };
   const hpBefore = hero.hp;
   const report = dealDamage(enemy.name, atkType, atkVal, defVal, target, dice, drawnCard);
@@ -1662,7 +1797,14 @@ async function enemyAttack() {
 
   renderStatus();
 
-  await heroHitAnim(hero.hp < hpBefore);
+  const heroLostHp = hero.hp < hpBefore;
+  let heroShieldState = "none";
+  if (heroShieldBefore > 0 && hero.shield === 0 && report.toShield > 0) {
+    heroShieldState = "shatter";
+  } else if (report.toShield > 0 && !heroLostHp && hero.shield > 0) {
+    heroShieldState = "block";
+  }
+  await heroHitAnim(heroLostHp, heroShieldState);
   if (hero.hp <= 0) loseGame();
 }
 

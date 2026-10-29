@@ -1161,3 +1161,234 @@ body {
     animation: none !important;
   }
 }
+
+/* ===== 第十版（v10）新增：護盾冰白殘影、冰藍色護盾光效（完全擋下）與冰藍色護盾破碎效果（護盾歸零） ===== */
+:root {
+  --ice-cyan: #5ce1e6;
+  --ice-bright: #aef6ff;
+  --ice-deep: #00a8e8;
+}
+
+.bar-ghost.shield-ghost {
+  background: rgba(174, 246, 255, 0.92);
+  box-shadow: 0 0 10px rgba(92, 225, 230, 0.95);
+  transition: width 620ms ease-out 200ms;
+}
+
+/* 護盾特效內部圖層（作用於 #enemy-panel 與 #dialogue-stage，無額外文字提示） */
+.shield-fx-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 12;
+  overflow: hidden;
+}
+
+.shield-wave-sweep {
+  position: absolute;
+  inset: -20% -40%;
+  background: linear-gradient(
+    115deg,
+    transparent 25%,
+    rgba(92, 225, 230, 0.08) 40%,
+    rgba(174, 246, 255, 0.48) 50%,
+    rgba(92, 225, 230, 0.12) 60%,
+    transparent 75%
+  );
+  transform: translateX(-100%);
+  opacity: 0;
+}
+
+.shield-hex-barrier {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(92, 225, 230, 0.24) 0%, rgba(0, 168, 232, 0.08) 65%, transparent 100%),
+    repeating-linear-gradient(60deg, rgba(174, 246, 255, 0.14) 0px, rgba(174, 246, 255, 0.14) 1px, transparent 1px, transparent 14px),
+    repeating-linear-gradient(-60deg, rgba(174, 246, 255, 0.14) 0px, rgba(174, 246, 255, 0.14) 1px, transparent 1px, transparent 14px);
+  opacity: 0;
+}
+
+.shield-crack-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  filter: drop-shadow(0 0 8px #5ce1e6) drop-shadow(0 0 14px #00a8e8);
+}
+
+.ice-shards-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.ice-shard {
+  position: absolute;
+  left: var(--sx, 50%);
+  top: var(--sy, 50%);
+  width: var(--sw, 12px);
+  height: var(--sh, 12px);
+  background: linear-gradient(135deg, #ffffff 0%, #aef6ff 45%, #38bdf8 100%);
+  clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%);
+  box-shadow: 0 0 10px #5ce1e6;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0);
+}
+
+/* 1. 護盾完全擋下攻擊：冰藍色護盾光效 (.glow-ice-shield) */
+#enemy-panel.glow-ice-shield {
+  animation: enemyGlowIceShield 650ms ease-out forwards;
+}
+#dialogue-stage.glow-ice-shield, #log.glow-ice-shield {
+  animation: dialogueGlowIceShield 650ms ease-out forwards;
+}
+.glow-ice-shield .shield-wave-sweep {
+  animation: shieldWaveSweepAnim 620ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.glow-ice-shield .shield-hex-barrier {
+  animation: shieldHexPulseAnim 650ms ease-out forwards;
+}
+.bar-track.shield-track-glow {
+  border-color: #aef6ff !important;
+  box-shadow: 0 0 12px rgba(92, 225, 230, 0.9), inset 0 0 6px rgba(174, 246, 255, 0.6) !important;
+}
+
+@keyframes enemyGlowIceShield {
+  0% { box-shadow: 0 0 0 0 transparent; }
+  35% {
+    box-shadow: 0 0 22px 6px var(--ice-cyan, #5ce1e6), inset 0 0 16px var(--ice-bright, #aef6ff);
+    border-color: var(--ice-bright, #aef6ff);
+  }
+  100% {
+    box-shadow: 0 0 12px var(--enemy-glow-soft, rgba(255, 92, 92, 0.38)),
+                inset 0 0 8px var(--enemy-glow-inset, rgba(255, 92, 92, 0.14));
+  }
+}
+
+@keyframes dialogueGlowIceShield {
+  0% { box-shadow: 0 0 0 0 transparent; border-color: #555; }
+  35% {
+    box-shadow: 0 0 20px 5px var(--ice-cyan, #5ce1e6), inset 0 0 16px var(--ice-bright, #aef6ff);
+    border-color: var(--ice-bright, #aef6ff);
+  }
+  100% { box-shadow: 0 0 0 0 transparent; border-color: #555; }
+}
+
+@keyframes shieldWaveSweepAnim {
+  0% { transform: translateX(-90%); opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 0.9; }
+  100% { transform: translateX(90%); opacity: 0; }
+}
+
+@keyframes shieldHexPulseAnim {
+  0% { opacity: 0; }
+  25% { opacity: 1; }
+  70% { opacity: 0.55; }
+  100% { opacity: 0; }
+}
+
+/* 2. 護盾歸零：冰藍色護盾破碎效果 (.shatter-ice-shield) */
+#enemy-panel.shatter-ice-shield {
+  animation: enemyIceShatterAnim 760ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+#dialogue-stage.shatter-ice-shield, #log.shatter-ice-shield {
+  animation: dialogueIceShatterAnim 760ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.shatter-ice-shield .shield-crack-svg {
+  animation: crackFlashAnim 740ms ease-out forwards;
+}
+.shatter-ice-shield .ice-shard {
+  animation: shardExplodeAnim 750ms cubic-bezier(0.15, 0.85, 0.25, 1) forwards;
+}
+.bar-track.shield-track-shatter {
+  animation: shieldBarShatterFlash 740ms ease-out forwards;
+}
+
+@keyframes enemyIceShatterAnim {
+  0% {
+    transform: translate(0, 0);
+    border-color: #ffffff;
+    box-shadow: 0 0 28px 8px rgba(174, 246, 255, 0.95), inset 0 0 22px rgba(255, 255, 255, 0.85);
+  }
+  14% { transform: translate(-6px, 2px); border-color: #aef6ff; }
+  28% { transform: translate(6px, -3px); border-color: #5ce1e6; }
+  42% {
+    transform: translate(-4px, -2px);
+    box-shadow: 0 0 20px 5px rgba(92, 225, 230, 0.8), inset 0 0 14px rgba(92, 225, 230, 0.5);
+  }
+  58% { transform: translate(3px, 1px); }
+  100% {
+    transform: translate(0, 0);
+    box-shadow: 0 0 12px var(--enemy-glow-soft, rgba(255, 92, 92, 0.38)),
+                inset 0 0 8px var(--enemy-glow-inset, rgba(255, 92, 92, 0.14));
+  }
+}
+
+@keyframes dialogueIceShatterAnim {
+  0% {
+    border-color: #ffffff;
+    box-shadow: 0 0 26px 7px rgba(174, 246, 255, 0.95), inset 0 0 24px rgba(255, 255, 255, 0.85);
+  }
+  30% {
+    border-color: #aef6ff;
+    box-shadow: 0 0 20px 5px rgba(92, 225, 230, 0.85), inset 0 0 16px rgba(92, 225, 230, 0.6);
+  }
+  65% {
+    border-color: #5ce1e6;
+    box-shadow: 0 0 12px 3px rgba(0, 168, 232, 0.45), inset 0 0 8px rgba(0, 168, 232, 0.25);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    border-color: #555;
+  }
+}
+
+@keyframes crackFlashAnim {
+  0% { opacity: 0; transform: scale(0.94); }
+  14% { opacity: 1; transform: scale(1); }
+  52% { opacity: 0.95; transform: scale(1.01); }
+  100% { opacity: 0; transform: scale(1.06); }
+}
+
+@keyframes shardExplodeAnim {
+  0% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(0.4) rotate(0deg);
+  }
+  20% {
+    opacity: 1;
+    transform: translate(calc(-50% + var(--tx) * 0.45), calc(-50% + var(--ty) * 0.45)) scale(1.15) rotate(calc(var(--rot) * 0.4));
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(0.15) rotate(var(--rot));
+  }
+}
+
+@keyframes shieldBarShatterFlash {
+  0%, 25% {
+    border-color: #ffffff;
+    box-shadow: 0 0 16px 4px #aef6ff, inset 0 0 10px #ffffff;
+  }
+  60% {
+    border-color: #5ce1e6;
+    box-shadow: 0 0 10px 2px #00a8e8;
+  }
+  100% {
+    border-color: #555;
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glow-ice-shield .shield-wave-sweep,
+  .glow-ice-shield .shield-hex-barrier,
+  .shatter-ice-shield .shield-crack-svg,
+  .shatter-ice-shield .ice-shard {
+    animation: none !important;
+  }
+}
