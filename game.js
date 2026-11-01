@@ -13,7 +13,8 @@ let lastEnemyShield = null;
 let lastRenderedEnemyRef = null;
 let gameMode = "dice"; // "dice" (0–20 骰子模式) 或 "poker" (1–13 撲克模式)
 let lastDrawnCard = null; // 紀錄最近一次抽出的撲克牌資訊
-let equipExpanded = false; // 頂部裝備抽屜展開狀態
+let equipExpanded = false; // 頂部裝備浮動版面展開狀態
+let skillExpanded = false; // 頂部技能浮動版面展開狀態
 let isBattleDrawerActive = false; // 是否正在拉下的戰鬥對話框中輸出
 let historyLogs = []; // 歷史對話紀錄（包含一般對話、戰鬥標題、戰鬥對話與雙行戰報）
 
@@ -225,18 +226,19 @@ function itemText(item) {
 // 從基礎數值與裝備計算實際雙攻、雙防與護盾
 // 註：若穿戴測試者無敵套裝 (isTesterItem)，該項數值固定顯示為 999；allowAccessory = true 時計算飾品【勇者之劍】倍率
 function calcStats(base, equip, allowAccessory = true) {
+  const bBonus = (allowAccessory && hero && enemy && hero.battleStatBonus) ? hero.battleStatBonus : 0;
   let physAtk = (equip.physWeapon && equip.physWeapon.isTesterItem)
     ? TESTER_STAT_VAL
-    : (base.physAtk || 0) + (equip.physWeapon ? equip.physWeapon.physAtk : 0);
+    : (base.physAtk || 0) + (equip.physWeapon ? equip.physWeapon.physAtk : 0) + bBonus;
   let magAtk = (equip.magWeapon && equip.magWeapon.isTesterItem)
     ? TESTER_STAT_VAL
-    : (base.magAtk || 0) + (equip.magWeapon ? equip.magWeapon.magAtk : 0);
+    : (base.magAtk || 0) + (equip.magWeapon ? equip.magWeapon.magAtk : 0) + bBonus;
   const physDef = (equip.armor && equip.armor.isTesterItem)
     ? TESTER_STAT_VAL
-    : (base.physDef || 0) + (equip.armor ? equip.armor.physDef : 0);
+    : (base.physDef || 0) + (equip.armor ? equip.armor.physDef : 0) + bBonus;
   const magDef = (equip.armor && equip.armor.isTesterItem)
     ? TESTER_STAT_VAL
-    : (base.magDef || 0) + (equip.armor ? equip.armor.magDef : 0);
+    : (base.magDef || 0) + (equip.armor ? equip.armor.magDef : 0) + bBonus;
   const shield = (base.shield || 0) + (equip.shield ? equip.shield.shield : 0);
 
   if (allowAccessory && equip.accessory && equip.accessory.atkMult && equip.accessory.atkMult > 1) {
@@ -244,6 +246,15 @@ function calcStats(base, equip, allowAccessory = true) {
     magAtk = Math.floor(magAtk * equip.accessory.atkMult);
   }
   return { physAtk, magAtk, physDef, magDef, shield };
+}
+
+function getSkillCategoryBtnClass(cat) {
+  if (typeof SKILL_CATEGORY_INFO !== "undefined" && SKILL_CATEGORY_INFO[cat]) {
+    return SKILL_CATEGORY_INFO[cat].btnClass;
+  }
+  if (cat === "attack") return "skill-btn-attack";
+  if (cat === "defense") return "skill-btn-defense";
+  return "skill-btn-charge";
 }
 
 // 二階段心魔複製勇者屬性時，若勇者穿戴的是「測試者 999 無敵套裝」，心魔只複製第 5 層標準數值，避免測試時卡死
@@ -438,12 +449,18 @@ function setChoices(list) {
     document.activeElement.blur();
   }
   $choices.innerHTML = "";
-  list.forEach(({ label, action }) => {
+  list.forEach(({ label, action, btnClass, disabled }) => {
     const b = document.createElement("button");
+    if (btnClass) b.className = btnClass;
+    if (disabled) {
+      b.disabled = true;
+      b.classList.add("skill-btn-disabled");
+    }
     b.innerHTML = colorize(escapeHtml(label));
     b.onclick = () => {
+      if (disabled) return;
       b.blur();
-      action();
+      if (action) action();
     };
     $choices.appendChild(b);
   });
@@ -453,7 +470,10 @@ function setChoices(list) {
 function renderStatus() {
   const s = calcStats(HERO_BASE, hero.equip, true);
   const curShield = enemy ? hero.shield : s.shield;
-  const maxShield = s.shield;
+  if (enemy && curShield > (hero.maxBattleShield || 0)) {
+    hero.maxBattleShield = curShield;
+  }
+  const maxShield = enemy ? Math.max(s.shield, hero.maxBattleShield || 0, curShield) : s.shield;
   const hpCur = Math.max(0, hero.hp);
   const hpPct = hero.maxHp > 0 ? Math.max(0, Math.min(100, (hpCur / hero.maxHp) * 100)) : 0;
   const isHeroHealing = (lastHeroHp !== null && hero.hp >= lastHeroHp);
@@ -469,6 +489,8 @@ function renderStatus() {
     ? `勇者${modeTag}　精神世界【心魔決戰】`
     : `勇者${modeTag}　第 ${floor} 層【${fInfo.name}】　第 ${round} / ${ROUNDS_PER_FLOOR} 回合`;
 
+  const skillCount = (hero && hero.skills) ? hero.skills.length : 0;
+  const skillBtnLabel = skillExpanded ? `技能(${skillCount}/2) ▲` : `技能(${skillCount}/2) ▼`;
   const equipBtnLabel = equipExpanded ? "裝備 ▲" : "裝備 ▼";
 
   // 第 1 部分：頂部勇者面板（單次建立骨架＋原地更新 DOM 以確保 CSS transition 與白色受傷殘影流暢運作）
@@ -481,6 +503,7 @@ function renderStatus() {
           <div class="panel-title" id="hero-panel-title"></div>
         </div>
         <div class="header-actions">
+          <button type="button" class="mini-btn" id="btn-toggle-skill"></button>
           <button type="button" class="mini-btn" id="btn-toggle-equip"></button>
           <button type="button" class="mini-btn" id="btn-open-history">歷史對話</button>
         </div>
@@ -504,14 +527,24 @@ function renderStatus() {
         </div>
       </div>
       <div class="stats-quad-row" id="hero-stats-quad"></div>
+      <div id="skill-drawer" class="hidden"></div>
       <div id="equip-drawer" class="hidden"></div>`;
 
     const $btnTester = document.getElementById("btn-tester");
     if ($btnTester) $btnTester.onclick = openTesterModal;
+    const $btnSkill = document.getElementById("btn-toggle-skill");
+    if ($btnSkill) {
+      $btnSkill.onclick = () => {
+        skillExpanded = !skillExpanded;
+        if (skillExpanded) equipExpanded = false;
+        renderStatus();
+      };
+    }
     const $btnEquip = document.getElementById("btn-toggle-equip");
     if ($btnEquip) {
       $btnEquip.onclick = () => {
         equipExpanded = !equipExpanded;
+        if (equipExpanded) skillExpanded = false;
         renderStatus();
       };
     }
@@ -521,6 +554,12 @@ function renderStatus() {
 
   const $title = document.getElementById("hero-panel-title");
   if ($title) $title.innerHTML = colorize(escapeHtml(stageTitle));
+
+  const $btnSkill = document.getElementById("btn-toggle-skill");
+  if ($btnSkill) {
+    $btnSkill.textContent = skillBtnLabel;
+    $btnSkill.classList.toggle("active", !!skillExpanded);
+  }
 
   const $btnEquip = document.getElementById("btn-toggle-equip");
   if ($btnEquip) {
@@ -572,15 +611,56 @@ function renderStatus() {
       <div class="stat-cell">魔防 <span class="val">${s.magDef}</span></div>`;
   }
 
+  const $skillDrawer = document.getElementById("skill-drawer");
+  if ($skillDrawer) {
+    $skillDrawer.classList.toggle("hidden", !skillExpanded);
+    const heroSkills = (hero && hero.skills) ? hero.skills : [];
+    let skillsHtml = `<div class="floating-drawer-header"><span>已裝備局內技能（${heroSkills.length} / ${MAX_EQUIPPED_SKILLS}）</span><button type="button" class="mini-btn" id="btn-close-skill-drawer">✕ 關閉</button></div>`;
+    if (heroSkills.length === 0) {
+      skillsHtml += `<div class="dim">尚未領悟任何技能（可於探索途中選擇「戰技殘頁」事件抽取領悟）。</div>`;
+    } else {
+      heroSkills.forEach((sk, idx) => {
+        const cdLeft = (hero.skillCooldowns && hero.skillCooldowns[sk.id]) ? hero.skillCooldowns[sk.id] : 0;
+        const cdTag = enemy
+          ? (cdLeft > 0 ? `冷卻中（剩餘 ${cdLeft} 回合）` : "立即可用")
+          : `冷卻 ${sk.cd} 回合（每戰重置）`;
+        skillsHtml += `
+          <div class="skill-detail-card cat-${sk.category}">
+            <div class="skill-detail-title">
+              <span>槽位 ${idx + 1}：【${escapeHtml(sk.name)}】</span>
+              <span class="skill-cat-badge cat-${sk.category}">${escapeHtml(sk.categoryLabel)}｜${escapeHtml(cdTag)}</span>
+            </div>
+            <div class="skill-detail-desc">${escapeHtml(sk.desc)}</div>
+          </div>`;
+      });
+    }
+    $skillDrawer.innerHTML = skillsHtml;
+    const $btnCloseSk = document.getElementById("btn-close-skill-drawer");
+    if ($btnCloseSk) {
+      $btnCloseSk.onclick = () => {
+        skillExpanded = false;
+        renderStatus();
+      };
+    }
+  }
+
   const $drawer = document.getElementById("equip-drawer");
   if ($drawer) {
     $drawer.classList.toggle("hidden", !equipExpanded);
     $drawer.innerHTML = `
+      <div class="floating-drawer-header"><span>當前穿戴文字裝備（共 5 格）</span><button type="button" class="mini-btn" id="btn-close-equip-drawer">✕ 關閉</button></div>
       <div>物理武器：${escapeHtml(itemText(hero.equip.physWeapon))}</div>
       <div>魔法武器：${escapeHtml(itemText(hero.equip.magWeapon))}</div>
       <div>裝甲：${escapeHtml(itemText(hero.equip.armor))}</div>
       <div>盾牌：${escapeHtml(itemText(hero.equip.shield))}</div>
       <div>飾品：${escapeHtml(itemText(hero.equip.accessory))}</div>`;
+    const $btnCloseEq = document.getElementById("btn-close-equip-drawer");
+    if ($btnCloseEq) {
+      $btnCloseEq.onclick = () => {
+        equipExpanded = false;
+        renderStatus();
+      };
+    }
   }
 
   // 第 2 部分：獨立 3 行「敵人對戰卡」（原地更新 DOM 保留生命殘影與護盾平滑過渡）
@@ -599,6 +679,9 @@ function renderStatus() {
       weakNote = enemy.inRage
         ? `［真名狂暴：攻擊×${PHASE2_BOSS_RAGE_MULT}］`
         : `［亂碼侵蝕：攻擊×${PHASE2_BOSS_INIT_MULT}／吸血+${PHASE2_BOSS_LIFESTEAL}］`;
+    }
+    if (enemy.burnTurns && enemy.burnTurns > 0) {
+      weakNote += (weakNote ? " " : "") + `［🔥燃燒：剩 ${enemy.burnTurns} 回合］`;
     }
 
     const eHpCur = Math.max(0, enemy.hp);
@@ -1091,7 +1174,7 @@ function buildFloorDeck(fl) {
       return {
         id: `fl${fl}_card${idx}_${Math.random()}`,
         type: "skill_camp",
-        label: "在殘頁篝火旁調息，回復 45% 最大生命（暫代技能）",
+        label: "發現前人遺留的戰技殘頁，領悟技能",
       };
     }
   });
@@ -1113,6 +1196,7 @@ function newGame(selectedMode) {
   }
   lastDrawnCard = null;
   equipExpanded = false;
+  skillExpanded = false;
   isBattleDrawerActive = false;
   historyLogs = [];
   if ($battleDrawer) $battleDrawer.classList.remove("open");
@@ -1130,7 +1214,15 @@ function newGame(selectedMode) {
     hp: HERO_BASE.hp,
     maxHp: HERO_BASE.hp,
     shield: 0,
+    maxBattleShield: 0,
     equip: { physWeapon: null, magWeapon: null, armor: null, shield: null, accessory: null },
+    skills: [],
+    skillCooldowns: {},
+    battleStatBonus: 0,
+    pendingChargeSkill: null,
+    activeChargeBuff: null,
+    turnBuff: {},
+    usedSkillThisTurn: null,
   };
   floor = 1;
   round = 1;
@@ -1214,9 +1306,9 @@ function selectCard(card) {
   if (card.type === "monster") {
     startBattle(card.monster);
   } else if (card.type === "camp") {
-    camp(false);
+    camp();
   } else {
-    camp(true);
+    triggerSkillCardEvent();
   }
 }
 
@@ -1226,20 +1318,87 @@ function advanceAfterEvent() {
   presentRound();
 }
 
-/* ===== 營地回復（方案 B：營地回復 60% 最大生命，殘頁篝火回復 45% 最大生命） ===== */
-function camp(isSkillPlaceholder) {
-  const ratio = isSkillPlaceholder ? SKILL_CAMP_HEAL_RATIO : CAMP_HEAL_RATIO;
-  const healTarget = Math.max(1, Math.floor(hero.maxHp * ratio));
+/* ===== 營地回復（方案 B：營地回復 60% 最大生命） ===== */
+function camp() {
+  const healTarget = Math.max(1, Math.floor(hero.maxHp * CAMP_HEAL_RATIO));
   const beforeHp = hero.hp;
   hero.hp = Math.min(hero.maxHp, hero.hp + healTarget);
   const healed = hero.hp - beforeHp;
-  if (isSkillPlaceholder) {
-    log(`你在殘頁篝火旁靜心調息（暫代技能，回復 45% 最大生命）。生命回復 ${healed} 點，現在是 ${hero.hp} / ${hero.maxHp}。`);
-  } else {
-    log(`你在營地生火休息（回復 60% 最大生命）。生命回復 ${healed} 點，現在是 ${hero.hp} / ${hero.maxHp}。`);
-  }
+  log(`你在營地生火休息（回復 60% 最大生命）。生命回復 ${healed} 點，現在是 ${hero.hp} / ${hero.maxHp}。`);
   renderStatus();
   setChoices([{ label: "繼續前進", action: advanceAfterEvent }]);
+}
+
+/* ===== 第十一版（v11）新增：樓層技能牌「三選一」抽取、滿槽替換與放棄無補償機制 ===== */
+function triggerSkillCardEvent() {
+  const ownedIds = new Set((hero.skills || []).map(s => s.id));
+  const unownedPool = SKILLS.filter(s => !ownedIds.has(s.id));
+  const candidates = drawFromDeck(unownedPool, SKILL_DRAW_COUNT);
+
+  log("你在斷壁殘垣間發現了前人遺留的「戰技殘頁」，上面浮現出三道截然不同的戰技刻印：", "big");
+  candidates.forEach((sk, idx) => {
+    log(`${idx + 1}. 【${sk.name}】（${sk.categoryLabel}）— ${sk.desc}`);
+  });
+  if (hero.skills.length > 0) {
+    const curNames = hero.skills.map(s => `【${s.name}】`).join("、");
+    log(`目前裝備技能（${hero.skills.length} / ${MAX_EQUIPPED_SKILLS}）：${curNames}`, "dim");
+  } else {
+    log(`目前裝備技能（0 / ${MAX_EQUIPPED_SKILLS}）：尚未裝備任何技能。`, "dim");
+  }
+  renderStatus();
+
+  const renderCandidateChoices = () => {
+    const choiceList = candidates.map(sk => ({
+      label: `領悟【${sk.name}】（${sk.categoryLabel}｜冷卻 ${sk.cd} 回合）`,
+      btnClass: getSkillCategoryBtnClass(sk.category),
+      action: () => onPickSkillCandidate(sk, renderCandidateChoices),
+    }));
+    choiceList.push({
+      label: "放棄，不學習新技能（直接繼續前進）",
+      action: () => {
+        log("你合上戰技殘頁，未領悟新技能，繼續踏上旅途。");
+        advanceAfterEvent();
+      },
+    });
+    setChoices(choiceList);
+  };
+
+  renderCandidateChoices();
+}
+
+function onPickSkillCandidate(newSkill, backToCandidatesFn) {
+  if (hero.skills.length < MAX_EQUIPPED_SKILLS) {
+    hero.skills.push({ ...newSkill });
+    hero.skillCooldowns[newSkill.id] = 0;
+    log(`你成功領悟並裝備了${newSkill.categoryLabel}技能：【${newSkill.name}】！`, "hit");
+    renderStatus();
+    setChoices([{ label: "繼續前進", action: advanceAfterEvent }]);
+    return;
+  }
+
+  // 已滿 2 個技能槽位：詢問玩家要捨棄哪一個舊技能（被捨棄的舊技能自動回池）
+  log(`你目前已裝備 ${MAX_EQUIPPED_SKILLS} 個技能，請選擇要捨棄哪一個舊技能以替換為【${newSkill.name}】：`, "big");
+  const replaceChoices = hero.skills.map((oldSk, slotIdx) => ({
+    label: `捨棄【${oldSk.name}】，替換為【${newSkill.name}】`,
+    btnClass: getSkillCategoryBtnClass(newSkill.category),
+    action: () => {
+      const removed = hero.skills[slotIdx];
+      delete hero.skillCooldowns[removed.id];
+      hero.skills[slotIdx] = { ...newSkill };
+      hero.skillCooldowns[newSkill.id] = 0;
+      log(`你捨棄了【${removed.name}】（已歸還至技能池），並裝備了新技能【${newSkill.name}】！`, "hit");
+      renderStatus();
+      setChoices([{ label: "繼續前進", action: advanceAfterEvent }]);
+    },
+  }));
+  replaceChoices.push({
+    label: "返回重新選擇",
+    action: () => {
+      log("你取消了替換，重新檢視三道戰技殘頁：", "dim");
+      backToCandidatesFn();
+    },
+  });
+  setChoices(replaceChoices);
 }
 
 /* ===== 第 6 回合：跨層寶箱與傳送門完整動畫鏈（第九版升級，延長開箱 2.8 秒與傳送門 3.0 秒） ===== */
@@ -1379,14 +1538,102 @@ function refreshChaosWeakness(announce) {
   }
 }
 
-// 第 4 部分：採用方案 B 極簡單行文字，並維持上下堆疊模式（預留未來局內技能空間）
+/* =========================================================
+   第十一版（v11）：戰鬥二階段按鈕流程（階段1：技能選擇［紅/藍/綠分類邊框］➔ 階段2：物理／魔法攻擊）
+   ========================================================= */
+
+function canCastSkill(sk) {
+  if (!enemy || !hero || hero.hp <= 0) return { ok: false, reason: "" };
+  const cdLeft = (hero.skillCooldowns && hero.skillCooldowns[sk.id]) ? hero.skillCooldowns[sk.id] : 0;
+  if (cdLeft > 0) {
+    return { ok: false, reason: `(冷卻${cdLeft})` };
+  }
+  if (sk.hpLimitRatio) {
+    const limitHp = Math.floor(hero.maxHp * sk.hpLimitRatio);
+    if (hero.hp > limitHp) {
+      return { ok: false, reason: `(需生命≤${limitHp})` };
+    }
+  }
+  return { ok: true, reason: "" };
+}
+
+// 回合開始：結算上一回合蓄力覺醒狀態，並進入第一階段（技能選擇）或第二階段（攻擊選擇）
+function beginHeroTurn() {
+  if (!enemy || !hero || hero.hp <= 0) return;
+  hero.turnBuff = {};
+  hero.usedSkillThisTurn = null;
+
+  // 若上一回合施放了【蓄力類】技能，於本回合開始時顯露效果！
+  if (hero.pendingChargeSkill) {
+    const pendingId = hero.pendingChargeSkill;
+    hero.pendingChargeSkill = null;
+
+    if (pendingId === "desperate_break") {
+      // 【絕境突破】下回合效果：重置另一個技能 CD 並使全屬性永久 +5
+      hero.battleStatBonus = (hero.battleStatBonus || 0) + 5;
+      let refreshedName = "";
+      (hero.skills || []).forEach(sk => {
+        if (sk.id !== "desperate_break") {
+          hero.skillCooldowns[sk.id] = 0;
+          refreshedName = sk.name;
+        }
+      });
+      renderStatus();
+      const refreshMsg = refreshedName ? `，且【${refreshedName}】冷卻時間已完全重置` : "";
+      log(`【絕境突破・覺醒】潛能徹底爆發！勇者物攻、物防、魔攻、魔防永久 +5（持續至本場戰鬥結束）${refreshMsg}！`, "hit");
+    } else {
+      hero.activeChargeBuff = pendingId;
+      if (pendingId === "full_focus") {
+        log("【全神蓄勢・爆發就緒】蓄力完成！本回合發動的物理或魔法攻擊將造成 2.25 倍最終總傷害！", "hit");
+      } else if (pendingId === "condense_qi") {
+        log("【凝神聚氣・爆發就緒】鎖定敵方命門！本回合攻擊基礎攻擊力 +25%，且必定觸發極限點數與穿盾破甲！", "hit");
+      } else if (pendingId === "limit_overload") {
+        log("【極限過載・爆發就緒】能量全面過載！本回合攻擊未計算前基礎攻擊力直接翻倍（×2.0），且無視敵方 50% 護盾！", "hit");
+      } else if (pendingId === "bulwark_convert") {
+        log(`【壁壘轉化・爆發就緒】壁壘能量匯聚於兵刃！本回合攻擊將全額附加當前剩餘護盾值（基礎攻擊力 +${hero.shield}）！`, "hit");
+      }
+    }
+  }
+
+  renderStatus();
+  showCombatButtons();
+}
+
+// 第一階段：若已裝備技能且本回合尚未施放技能，先顯示【技能一】、【技能二】、【不使用技能】
 function showCombatButtons() {
-  if (!enemy || hero.hp <= 0) return;
+  if (!enemy || !hero || hero.hp <= 0) return;
+  if (!hero.skills || hero.skills.length === 0 || hero.usedSkillThisTurn) {
+    showAttackButtons();
+    return;
+  }
+
+  const stage1Choices = hero.skills.map(sk => {
+    const check = canCastSkill(sk);
+    const btnText = check.ok ? `【${sk.name}】` : `【${sk.name} ${check.reason}】`;
+    return {
+      label: btnText,
+      btnClass: getSkillCategoryBtnClass(sk.category),
+      disabled: !check.ok,
+      action: () => useCombatSkill(sk),
+    };
+  });
+
+  stage1Choices.push({
+    label: "【不使用技能】",
+    action: () => showAttackButtons(),
+  });
+
+  setChoices(stage1Choices);
+}
+
+// 第二階段：顯示【物理攻擊】與【魔法攻擊】按鈕（僅顯示技能與武器名稱，保持極簡）
+function showAttackButtons() {
+  if (!enemy || !hero || hero.hp <= 0) return;
   const wPhys = hero.equip.physWeapon ? hero.equip.physWeapon.name : "徒手";
   const wMag = hero.equip.magWeapon ? hero.equip.magWeapon.name : "基礎魔力";
   const hasSwordMult = (hero.equip.accessory && hero.equip.accessory.isHeroSword && hero.equip.accessory.atkMult > 1);
   const swordTag = hasSwordMult ? `［勇者之劍×${hero.equip.accessory.atkMult}］` : "";
-  setChoices([
+  const attackChoices = [
     {
       label: `【物理攻擊】使用${wPhys}${swordTag}`,
       action: () => heroAttack("phys"),
@@ -1395,7 +1642,208 @@ function showCombatButtons() {
       label: `【魔法攻擊】使用${wMag}${swordTag}`,
       action: () => heroAttack("mag"),
     },
-  ]);
+  ];
+  if (!hero.usedSkillThisTurn && hero.skills && hero.skills.length > 0) {
+    attackChoices.push({
+      label: "返回技能選擇",
+      action: () => showCombatButtons(),
+    });
+  }
+  setChoices(attackChoices);
+}
+
+// 玩家點擊施放技能
+async function useCombatSkill(sk) {
+  if (!enemy || !hero || hero.hp <= 0) return;
+  const check = canCastSkill(sk);
+  if (!check.ok) return;
+
+  setChoices([]);
+  hero.usedSkillThisTurn = sk.id;
+  hero.skillCooldowns[sk.id] = sk.cd; // 完整冷卻間隔回合制：施放當回合設定為 cd，且本回合結束不遞減
+
+  const s = calcStats(HERO_BASE, hero.equip, true);
+  const highAtk = Math.max(s.physAtk, s.magAtk);
+  const highDef = Math.max(s.physDef, s.magDef);
+
+  // ── A. 不跳過攻擊之技能（施放後立即進入第二階段選擇物理／魔法攻擊） ──
+  if (!sk.skipAttack) {
+    if (sk.id === "ink_flame") {
+      hero.turnBuff.applyBurn = true;
+      log("勇者施放【墨焰燃蝕】！字元烈焰纏繞武器，本回合攻擊命中後將使敵方陷入 3 回合【燃燒】（每回合結束扣除 1/16 最大生命）！", "hit");
+    } else if (sk.id === "flaw_insight") {
+      hero.turnBuff.defIgnoreRatio = 0.40;
+      log("勇者施放【破綻洞悉】！看穿敵方文字防禦裂隙，本回合發動的物理或魔法攻擊將無視目標 40% 對應防禦力！", "hit");
+    } else if (sk.id === "word_leech") {
+      hero.turnBuff.leechHpRatio = 0.35;
+      log("勇者施放【文字汲取】！本回合攻擊命中後，目標實際減少生命值的 35% 將轉化為勇者自身生命回復！", "hit");
+    } else if (sk.id === "shield_reflect") {
+      hero.turnBuff.reflectActive = true;
+      log("勇者施放【護盾反震】！啟動防禦共鳴力場，本回合受擊時將以（護盾受傷 × 1 + 生命受傷 × 0.8）發動反擊！", "hit");
+    } else if (sk.id === "crystal_wall") {
+      hero.shield += 5;
+      hero.turnBuff.crystalWall = true;
+      renderStatus();
+      log(`勇者施放【晶化壁壘】！立即補充 5 點護盾（目前護盾 ${hero.shield}）；本回合護盾受到的所有傷害降低 50%，且若護盾被擊碎，溢出傷害完全無效化！`, "hit");
+    } else if (sk.id === "word_shield_leech") {
+      hero.turnBuff.leechShieldRatio = 0.35;
+      log("勇者施放【文字汲盾】！本回合攻擊命中後，目標實際減少生命值的 35% 將轉化為勇者自身護盾值！", "hit");
+    } else if (sk.id === "barrier_revive") {
+      const healAmt = Math.max(3, Math.floor(hero.maxHp * 0.15));
+      const beforeHp = hero.hp;
+      hero.hp = Math.min(hero.maxHp, hero.hp + healAmt);
+      const actualHeal = hero.hp - beforeHp;
+      hero.shield += 8;
+      renderStatus();
+      log(`勇者施放【屏障復甦】！立即回復 ${actualHeal} 點生命（目前生命 ${hero.hp} / ${hero.maxHp}），並重新生成 8 點護盾（目前護盾 ${hero.shield}）！`, "hit");
+    }
+    renderStatus();
+    showAttackButtons();
+    return;
+  }
+
+  // ── B. 跳過攻擊之技能（直接結算效果，跳過本回合擲骰／抽牌與普攻階段） ──
+  if (sk.id === "shield_slash") {
+    // 【破盾斬】：1.4 × 較高攻，對護盾 200% 摧毀，餘傷扣血
+    const baseDmg = Math.floor(highAtk * 1.4);
+    const enemyShieldBefore = enemy.shield;
+    const enemyHpBefore = enemy.hp;
+    const shdBroken = Math.min(enemy.shield, baseDmg * 2);
+    const baseUsed = Math.ceil(shdBroken / 2);
+    const hpDmg = Math.max(0, baseDmg - baseUsed);
+
+    const slashP = enemyPanelSlashAnim();
+    await sleep(150);
+    enemy.shield -= shdBroken;
+    enemy.hp -= hpDmg;
+    const enemyLostHp = enemy.hp < enemyHpBefore;
+    let enemyShieldState = "none";
+    if (enemyShieldBefore > 0 && enemy.shield === 0 && shdBroken > 0) {
+      enemyShieldState = "shatter";
+    } else if (shdBroken > 0 && !enemyLostHp && enemy.shield > 0) {
+      enemyShieldState = "block";
+    }
+    renderStatus();
+    const parts = [];
+    if (shdBroken > 0) parts.push(`護盾 −${shdBroken}`);
+    if (hpDmg > 0) parts.push(`生命 −${hpDmg}`);
+    const mainLine = `勇者施放【破盾斬】［必中｜雙倍破盾］ ➔ 造成 ${shdBroken + hpDmg} 點破障重擊！（${parts.join("，") || "0 傷害"}）`;
+    const formulaLine = `基礎值 ${baseDmg}（較高攻 ${highAtk} × 1.4）➔ 破盾消耗 ${baseUsed}（雙倍擊碎 ${shdBroken} 盾），剩餘 ${hpDmg} 直扣生命`;
+    logCombatReport(true, mainLine, formulaLine);
+    const hitP = enemyHitAnim(enemyLostHp, enemyShieldState);
+    await Promise.all([slashP, hitP]);
+    await sleep(320);
+    await finishHeroTurnAndEnemyAct(true);
+    return;
+  }
+
+  if (sk.id === "desperate_strike") {
+    // 【捨身決絕】：消耗 20% 當前 HP（保底留 1 血），造成 (消耗HP×2.5 + 60%較高攻) 真實傷害
+    const calcCost = Math.max(1, Math.floor(hero.hp * 0.20));
+    const actualCost = Math.min(Math.max(0, hero.hp - 1), calcCost);
+    hero.hp = Math.max(1, hero.hp - actualCost);
+    const trueDmg = Math.floor(calcCost * 2.5 + highAtk * 0.6);
+
+    const slashP = enemyPanelSlashAnim();
+    await sleep(150);
+    enemy.hp -= trueDmg;
+    renderStatus();
+    const mainLine = `勇者施放【捨身決絕】［消耗 ${actualCost} 點生命｜真實傷害］ ➔ 造成 ${trueDmg} 點真實傷害！（生命 −${trueDmg}）`;
+    const formulaLine = `消耗生命 ${calcCost} × 2.5 + 較高攻 ${highAtk} × 60% = ${trueDmg} 無視防盾真實傷害`;
+    logCombatReport(true, mainLine, formulaLine);
+    const hitP = enemyHitAnim(true, "none");
+    await Promise.all([slashP, hitP]);
+    await sleep(320);
+    await finishHeroTurnAndEnemyAct(true);
+    return;
+  }
+
+  if (sk.id === "shield_rebuild") {
+    const shdGain = 6 + Math.floor(highDef * 0.35);
+    hero.shield += shdGain;
+    renderStatus();
+    logCombatReport(
+      true,
+      `勇者施放【護盾重構】［跳過攻擊］ ➔ 立即生成 ${shdGain} 點護盾！（目前護盾 ${hero.shield}）`,
+      `基礎 6 + 較高防 ${highDef} × 35% = +${shdGain} 護盾`
+    );
+    await sleep(360);
+    await finishHeroTurnAndEnemyAct(false);
+    return;
+  }
+
+  if (sk.id === "full_focus") {
+    hero.turnBuff.dmgReduceRatio = 0.30;
+    hero.pendingChargeSkill = "full_focus";
+    renderStatus();
+    logCombatReport(
+      true,
+      "勇者施放【全神蓄勢】［跳過攻擊｜蓄力階段］ ➔ 本回合受傷降低 30%，下一回合攻擊造成 2.25 倍最終傷害！",
+      "當回合減傷 30% ➔ 下回合最終傷害 × 2.25"
+    );
+    await sleep(360);
+    await finishHeroTurnAndEnemyAct(false);
+    return;
+  }
+
+  if (sk.id === "condense_qi") {
+    hero.pendingChargeSkill = "condense_qi";
+    renderStatus();
+    logCombatReport(
+      true,
+      "勇者施放【凝神聚氣】［跳過攻擊｜蓄力階段］ ➔ 鎖定敵方命門，下一回合基礎攻擊 +25% 且必出極限穿盾破甲！",
+      "下回合基礎攻擊 × 1.25 ＋ 必出骰子20／撲克同花色K+A穿甲"
+    );
+    await sleep(360);
+    await finishHeroTurnAndEnemyAct(false);
+    return;
+  }
+
+  if (sk.id === "limit_overload") {
+    hero.shield += 6;
+    hero.pendingChargeSkill = "limit_overload";
+    renderStatus();
+    logCombatReport(
+      true,
+      `勇者施放【極限過載】［跳過攻擊｜蓄力階段］ ➔ 立即獲得 6 點護盾（目前護盾 ${hero.shield}），下一回合基礎攻擊翻倍（×2.0）且無視 50% 護盾！`,
+      "當回合護盾 +6 ➔ 下回合基礎攻擊 × 2.0 ＋ 無視敵方 50% 護盾"
+    );
+    await sleep(360);
+    await finishHeroTurnAndEnemyAct(false);
+    return;
+  }
+
+  if (sk.id === "bulwark_convert") {
+    const beforeShd = hero.shield;
+    hero.shield = (hero.shield + 6) * 2;
+    hero.pendingChargeSkill = "bulwark_convert";
+    renderStatus();
+    logCombatReport(
+      true,
+      `勇者施放【壁壘轉化】［跳過攻擊｜蓄力階段］ ➔ 護盾補充並翻倍至 ${hero.shield} 點，下一回合將剩餘護盾 100% 附加至攻擊力！`,
+      `（原護盾 ${beforeShd} + 6）× 2 = ${hero.shield} 護盾 ➔ 下回合剩餘護盾 100% 轉加基礎攻擊`
+    );
+    await sleep(360);
+    await finishHeroTurnAndEnemyAct(false);
+    return;
+  }
+
+  if (sk.id === "desperate_break") {
+    const healAmt = Math.max(4, Math.floor(hero.maxHp * 0.20));
+    const beforeHp = hero.hp;
+    hero.hp = Math.min(hero.maxHp, hero.hp + healAmt);
+    const actualHeal = hero.hp - beforeHp;
+    hero.pendingChargeSkill = "desperate_break";
+    renderStatus();
+    logCombatReport(
+      true,
+      `勇者施放【絕境突破】［跳過攻擊｜殘血蓄力］ ➔ 立即回復 ${actualHeal} 點生命（${hero.hp}/${hero.maxHp}），下一回合重置另一技能冷卻且全屬性永久 +5！`,
+      `當回合回復 20% 最大生命（+${actualHeal} HP）➔ 下回合另一技能 CD 歸零 ＋ 雙攻雙防永久 +5`
+    );
+    await sleep(360);
+    await finishHeroTurnAndEnemyAct(false);
+    return;
+  }
 }
 
 async function startBattle(template) {
@@ -1407,7 +1855,7 @@ async function startBattle(template) {
     const baseMirrorPhysDef = mirror.physDef + PHASE2_BOSS_BONUS_DEF;
     const baseMirrorMagDef = mirror.magDef + PHASE2_BOSS_BONUS_DEF;
     lastEnemyHp = template.hp;
-  enemy = {
+    enemy = {
       name: template.name,
       trueName: template.trueName,
       type: "chaos",
@@ -1430,6 +1878,7 @@ async function startBattle(template) {
       halfHpTriggered: false,
       firstAttackDone: false,
       inRage: false,
+      burnTurns: 0,
       items: [],
     };
   } else {
@@ -1456,12 +1905,22 @@ async function startBattle(template) {
       maxShield: st.shield,
       weakness: null,
       halfHpTriggered: false,
+      burnTurns: 0,
       items: template.items,
     };
   }
 
-  // 護盾每場戰鬥開始時刷新
+  // 每場戰鬥開始時：刷新護盾、重置所有已裝備技能冷卻為 0、重置戰鬥內臨時狀態
+  hero.battleStatBonus = 0;
+  hero.pendingChargeSkill = null;
+  hero.activeChargeBuff = null;
+  hero.turnBuff = {};
+  hero.usedSkillThisTurn = null;
+  if (hero.skills) {
+    hero.skills.forEach(sk => { hero.skillCooldowns[sk.id] = 0; });
+  }
   hero.shield = calcStats(HERO_BASE, hero.equip, true).shield;
+  hero.maxBattleShield = hero.shield;
   lastHeroShield = hero.shield;
   lastEnemyShield = enemy.shield;
   ensureDialogueShieldFxLayer();
@@ -1482,7 +1941,7 @@ async function startBattle(template) {
   if (enemy.isBoss) {
     log("魔王的力量有點奇怪，似乎不屬於這裏……", "text-curse");
   } else if (enemy.isPhase2Boss) {
-    log(`【精神世界】${enemy.name}完全複製了你身上的文字裝備與基礎能力（不包含飾品【勇者之劍】），並發動【亂碼侵蝕】（攻擊×${PHASE2_BOSS_INIT_MULT}／命中吸取 ${PHASE2_BOSS_LIFESTEAL} 點生命）！`, "text-curse");
+    log(`【精神世界】${enemy.name}完全複製了你身上的文字裝備與基礎能力（不包含飾品【勇者之劍】與局內技能），並發動【亂碼侵蝕】（攻擊×${PHASE2_BOSS_INIT_MULT}／命中吸取 ${PHASE2_BOSS_LIFESTEAL} 點生命）！`, "text-curse");
   }
 
   if (enemy.type === "chaos" && !enemy.isPhase2Boss) {
@@ -1501,7 +1960,7 @@ async function startBattle(template) {
     log(`先攻抽牌：${card.fullLabel}，${isHeroFirst ? "單數，勇者先攻！" : "雙數，" + enemy.name + "先攻！"}`);
     if (!isHeroFirst) {
       await enemyAttack();
-      if (!enemy || hero.hp <= 0) return;
+      if (!enemy || hero.hp <= 0 || enemy.hp <= 0) return;
     }
   } else {
     r = rollD20();
@@ -1510,17 +1969,24 @@ async function startBattle(template) {
     log(`先攻骰：${r}，${isHeroFirst ? "單數，勇者先攻！" : "雙數，" + enemy.name + "先攻！"}`);
     if (!isHeroFirst) {
       await enemyAttack();
-      if (!enemy || hero.hp <= 0) return;
+      if (!enemy || hero.hp <= 0 || enemy.hp <= 0) return;
     }
   }
-  renderStatus();
-  showCombatButtons();
+  beginHeroTurn();
 }
 
-// 計算並套用傷害（方案 B：骰子 0 失手、20 無視 50% 防禦＋無視護盾；撲克黑紅花色臨時+3、K 無視護盾、A 無視 50% 防禦＋無視護盾）
-function dealDamage(attackerName, atkType, atk, def, target, dice, cardInfo) {
+// 計算並套用傷害（支援第十一版技能修飾：破綻洞悉 40% 穿防、全神蓄勢 2.25 倍終傷、極限過載無視 50% 護盾、晶化壁壘護盾減半與破盾溢傷無效化、全神蓄勢受擊 -30%）
+function dealDamage(attackerName, atkType, atk, def, target, dice, cardInfo, options = {}) {
   const atkLabel = atkType === "mag" ? "魔法攻擊" : "物理攻擊";
   const defLabel = atkType === "mag" ? "魔防" : "物防";
+  const defIgnoreRatio = options.defIgnoreRatio || 0;
+  const finalDmgMult = options.finalDmgMult || 1;
+  const ignoreHalfShield = !!options.ignoreHalfShield;
+  const targetDmgReduceRatio = options.targetDmgReduceRatio || 0;
+  const targetCrystalWall = !!options.targetCrystalWall;
+  const extraTags = options.extraTags ? [...options.extraTags] : [];
+
+  const baseDefAfterSkill = defIgnoreRatio > 0 ? Math.floor(def * (1 - defIgnoreRatio)) : def;
 
   // 1. 骰子模式（cardInfo 為 null）
   if (!cardInfo) {
@@ -1531,21 +1997,57 @@ function dealDamage(attackerName, atkType, atk, def, target, dice, cardInfo) {
     }
     const isCrit20 = (dice === 20);
     const ignoreShield = (dice >= DICE_PIERCE_SHIELD_MIN);
-    const effDef = isCrit20 ? Math.floor(def * DICE_CRIT_DEF_MULT) : def;
-    const dmg = Math.max(0, atk + dice - effDef);
-    const toShield = ignoreShield ? 0 : Math.min(target.shield, dmg);
-    const toHp = dmg - toShield;
-    target.shield -= toShield;
-    target.hp -= toHp;
-
-    let specialTag = "";
-    if (isCrit20) {
-      specialTag = "［骰出20：無視50%防禦＋無視護盾］";
-    } else if (ignoreShield) {
-      specialTag = `［骰出${dice}：無視護盾］`;
+    const effDef = isCrit20 ? Math.floor(baseDefAfterSkill * DICE_CRIT_DEF_MULT) : baseDefAfterSkill;
+    let dmg = Math.max(0, atk + dice - effDef);
+    if (finalDmgMult !== 1) {
+      dmg = Math.floor(dmg * finalDmgMult);
+    }
+    if (targetDmgReduceRatio > 0) {
+      dmg = Math.floor(dmg * (1 - targetDmgReduceRatio));
     }
 
-    let mainLine = `${attackerName}發動【${atkLabel}】${specialTag} ➔ 造成 ${dmg} 點傷害！`;
+    let toShield = 0;
+    let toHp = 0;
+    if (targetCrystalWall && target.shield > 0) {
+      const crystalDmg = Math.floor(dmg * 0.5);
+      if (crystalDmg >= target.shield) {
+        toShield = target.shield;
+        target.shield = 0;
+        toHp = 0; // 晶化壁壘：破盾溢出傷害完全無效化
+        extraTags.push("晶化壁壘：護盾減傷50%＋溢傷無效化");
+      } else {
+        toShield = crystalDmg;
+        target.shield -= toShield;
+        toHp = 0;
+        extraTags.push("晶化壁壘：護盾減傷50%");
+      }
+      dmg = toShield;
+    } else if (ignoreShield) {
+      toShield = 0;
+      toHp = dmg;
+      target.hp -= toHp;
+    } else if (ignoreHalfShield && target.shield > 0) {
+      const bypassedShield = Math.floor(target.shield * 0.5);
+      const blockableShield = target.shield - bypassedShield;
+      toShield = Math.min(blockableShield, dmg);
+      toHp = dmg - toShield;
+      target.shield -= toShield;
+      target.hp -= toHp;
+    } else {
+      toShield = Math.min(target.shield, dmg);
+      toHp = dmg - toShield;
+      target.shield -= toShield;
+      target.hp -= toHp;
+    }
+
+    if (isCrit20) {
+      extraTags.unshift("骰出20：無視50%防禦＋無視護盾");
+    } else if (ignoreShield) {
+      extraTags.unshift(`骰出${dice}：無視護盾`);
+    }
+    const tagStr = extraTags.length > 0 ? `［${extraTags.join("｜")}］` : "";
+
+    let mainLine = `${attackerName}發動【${atkLabel}】${tagStr} ➔ 造成 ${dmg} 點傷害！`;
     if (dmg > 0) {
       const parts = [];
       if (toShield > 0) parts.push(`護盾 −${toShield}`);
@@ -1553,37 +2055,79 @@ function dealDamage(attackerName, atkType, atk, def, target, dice, cardInfo) {
       mainLine += `（${parts.join("，")}）`;
     }
     const rollExpr = ignoreShield ? `骰子 ${dice}（穿盾）` : `骰子 ${dice}`;
-    const defExpr = isCrit20 ? `${defLabel} ${effDef}（原 ${def} 減半）` : `${defLabel} ${def}`;
-    const formulaLine = `${atk} + ${rollExpr} − ${defExpr} = ${dmg} 傷害`;
+    const defExpr = (effDef !== def) ? `${defLabel} ${effDef}（原 ${def}）` : `${defLabel} ${def}`;
+    let formulaLine = `${atk} + ${rollExpr} − ${defExpr}`;
+    if (finalDmgMult !== 1) formulaLine = `（${formulaLine}）× ${finalDmgMult}`;
+    if (targetDmgReduceRatio > 0) formulaLine = `（${formulaLine}）× ${Math.round((1 - targetDmgReduceRatio) * 100)}%`;
+    formulaLine += ` = ${dmg} 傷害`;
     return { mainLine, formulaLine, dmg, toShield, toHp };
   }
 
-  // 2. 撲克模式（方案 B：無失手；黑色花色物攻臨時+3、紅色花色魔攻臨時+3；K 無視護盾；A 無視50%防禦＋無視護盾）
+  // 2. 撲克模式（方案 B ＋ 第十一版技能修飾）
   const isBlackSuit = (cardInfo.suit.key === "S" || cardInfo.suit.key === "C");
   const suitMatched = (atkType === "phys" && isBlackSuit) || (atkType === "mag" && !isBlackSuit);
   const suitBonus = suitMatched ? POKER_SUIT_ATK_BONUS : 0;
   const effAtk = atk + suitBonus;
 
-  const isAce = (cardInfo.rank === "A");
+  const isAce = (cardInfo.rank === "A") || !!cardInfo.forceAcePierce;
   const isKing = (dice === POKER_KING_PIERCE_VAL);
   const ignoreShield = (isAce || isKing);
-  const effDef = isAce ? Math.floor(def * POKER_ACE_DEF_MULT) : def;
+  const effDef = isAce ? Math.floor(baseDefAfterSkill * POKER_ACE_DEF_MULT) : baseDefAfterSkill;
 
-  const dmg = Math.max(0, effAtk + dice - effDef);
-  const toShield = ignoreShield ? 0 : Math.min(target.shield, dmg);
-  const toHp = dmg - toShield;
-  target.shield -= toShield;
-  target.hp -= toHp;
+  let dmg = Math.max(0, effAtk + dice - effDef);
+  if (finalDmgMult !== 1) {
+    dmg = Math.floor(dmg * finalDmgMult);
+  }
+  if (targetDmgReduceRatio > 0) {
+    dmg = Math.floor(dmg * (1 - targetDmgReduceRatio));
+  }
+
+  let toShield = 0;
+  let toHp = 0;
+  if (targetCrystalWall && target.shield > 0) {
+    const crystalDmg = Math.floor(dmg * 0.5);
+    if (crystalDmg >= target.shield) {
+      toShield = target.shield;
+      target.shield = 0;
+      toHp = 0; // 晶化壁壘：破盾溢出傷害完全無效化
+      extraTags.push("晶化壁壘：護盾減傷50%＋溢傷無效化");
+    } else {
+      toShield = crystalDmg;
+      target.shield -= toShield;
+      toHp = 0;
+      extraTags.push("晶化壁壘：護盾減傷50%");
+    }
+    dmg = toShield;
+  } else if (ignoreShield) {
+    toShield = 0;
+    toHp = dmg;
+    target.hp -= toHp;
+  } else if (ignoreHalfShield && target.shield > 0) {
+    const bypassedShield = Math.floor(target.shield * 0.5);
+    const blockableShield = target.shield - bypassedShield;
+    toShield = Math.min(blockableShield, dmg);
+    toHp = dmg - toShield;
+    target.shield -= toShield;
+    target.hp -= toHp;
+  } else {
+    toShield = Math.min(target.shield, dmg);
+    toHp = dmg - toShield;
+    target.shield -= toShield;
+    target.hp -= toHp;
+  }
 
   const tags = [];
   if (suitBonus > 0) {
     tags.push(`${isBlackSuit ? "黑花色物攻" : "紅花色魔攻"}+${suitBonus}`);
   }
-  if (isAce) {
+  if (cardInfo.forceAcePierce && isKing) {
+    tags.push("K+A：無視護盾與50%防禦");
+  } else if (isAce) {
     tags.push("A：無視護盾與部分防禦");
   } else if (isKing) {
     tags.push("K：無視護盾");
   }
+  tags.push(...extraTags);
   const tagStr = tags.length > 0 ? `［${tags.join("｜")}］` : "";
 
   let mainLine = `${attackerName}發動【${atkLabel}】${tagStr} ➔ 造成 ${dmg} 點傷害！`;
@@ -1598,8 +2142,11 @@ function dealDamage(attackerName, atkType, atk, def, target, dice, cardInfo) {
   const rollExpr = ignoreShield
     ? `撲克 ${dice}（${cardInfo.label} 穿盾）`
     : `撲克 ${dice}（${cardInfo.label}）`;
-  const defExpr = isAce ? `${defLabel} ${effDef}（原 ${def} 減半）` : `${defLabel} ${def}`;
-  const formulaLine = `${atkExpr} + ${rollExpr} − ${defExpr} = ${dmg} 傷害`;
+  const defExpr = (effDef !== def) ? `${defLabel} ${effDef}（原 ${def}）` : `${defLabel} ${def}`;
+  let formulaLine = `${atkExpr} + ${rollExpr} − ${defExpr}`;
+  if (finalDmgMult !== 1) formulaLine = `（${formulaLine}）× ${finalDmgMult}`;
+  if (targetDmgReduceRatio > 0) formulaLine = `（${formulaLine}）× ${Math.round((1 - targetDmgReduceRatio) * 100)}%`;
+  formulaLine += ` = ${dmg} 傷害`;
   return { mainLine, formulaLine, dmg, toShield, toHp };
 }
 
@@ -1607,32 +2154,82 @@ async function heroAttack(atkType) {
   setChoices([]); // 動畫期間鎖定按鈕
   const s = calcStats(HERO_BASE, hero.equip, true);
   const isMag = atkType === "mag";
-  const atkVal = isMag ? s.magAtk : s.physAtk;
+  let atkVal = isMag ? s.magAtk : s.physAtk;
   const defVal = isMag ? enemy.curMagDef : enemy.curPhysDef;
+
+  // 結算本回合攜帶的蓄力爆發與當回合技能增益
+  const activeCharge = hero.activeChargeBuff;
+  hero.activeChargeBuff = null;
+  const extraTags = [];
+  let finalDmgMult = 1;
+  let ignoreHalfShield = false;
+  let forceMaxRoll = false;
+
+  if (activeCharge === "bulwark_convert") {
+    const shdBonus = Math.max(0, hero.shield);
+    atkVal += shdBonus;
+    extraTags.push(`壁壘轉化：攻擊+${shdBonus}`);
+  } else if (activeCharge === "condense_qi") {
+    atkVal = Math.floor(atkVal * 1.25);
+    forceMaxRoll = true;
+    extraTags.push("凝神聚氣：攻擊+25%＋極限穿甲");
+  } else if (activeCharge === "limit_overload") {
+    atkVal = Math.floor(atkVal * 2.0);
+    ignoreHalfShield = true;
+    extraTags.push("極限過載：基礎攻×2＋無視50%護盾");
+  } else if (activeCharge === "full_focus") {
+    finalDmgMult = 2.25;
+    extraTags.push("全神蓄勢：總傷×2.25");
+  }
+
+  const defIgnoreRatio = (hero.turnBuff && hero.turnBuff.defIgnoreRatio) ? hero.turnBuff.defIgnoreRatio : 0;
+  if (defIgnoreRatio > 0) {
+    extraTags.push("破綻洞悉：無視40%防禦");
+  }
+
+  const shownEffDef = defIgnoreRatio > 0 ? Math.floor(defVal * (1 - defIgnoreRatio)) : defVal;
   const rollWord = gameMode === "poker" ? "撲克" : "骰子";
   const labelNote = isMag
-    ? `魔攻 ${atkVal} + ${rollWord} − 魔防 ${defVal}`
-    : `物攻 ${atkVal} + ${rollWord} − 物防 ${defVal}`;
+    ? `魔攻 ${atkVal} + ${rollWord} − 魔防 ${shownEffDef}`
+    : `物攻 ${atkVal} + ${rollWord} − 物防 ${shownEffDef}`;
 
   let dice, drawnCard = null;
   let pokerSpecialPrompt = "";
 
   if (gameMode === "poker") {
-    drawnCard = drawPokerCard();
+    if (forceMaxRoll) {
+      const forcedSuit = isMag ? POKER_SUITS[1] : POKER_SUITS[0]; // ♥紅心 or ♠黑桃
+      drawnCard = {
+        suit: forcedSuit,
+        rank: "K",
+        value: 13,
+        label: `${forcedSuit.symbol}K`,
+        fullLabel: `${forcedSuit.name}${forcedSuit.symbol}K`,
+        forceAcePierce: true,
+      };
+    } else {
+      drawnCard = drawPokerCard();
+    }
     lastDrawnCard = drawnCard;
     dice = drawnCard.value;
-    pokerSpecialPrompt = buildPokerSpecialPrompt(atkType, drawnCard);
+    pokerSpecialPrompt = forceMaxRoll
+      ? `${isMag ? "魔攻暫時增加！" : "物攻暫時增加！"}<br>【凝神聚氣】K+A 無視護盾與50%防禦！`
+      : buildPokerSpecialPrompt(atkType, drawnCard);
     await rollPokerAnim("勇者", HERO_COLOR, drawnCard, labelNote, pokerSpecialPrompt);
   } else {
-    dice = rollD20();
+    dice = forceMaxRoll ? 20 : rollD20();
     await rollDiceAnim("勇者", HERO_COLOR, dice, labelNote);
   }
 
-  // 第九版／第十版更新：預先計算傷害結果，劈刀命中瞬間（約 150ms）同步觸發受擊紅/金/冰藍護盾光效或護盾破碎動畫
   const enemyShieldBefore = enemy.shield;
   const enemyHpBefore = enemy.hp;
   const heroTarget = { shield: enemy.shield, hp: enemy.hp };
-  const report = dealDamage("勇者", atkType, atkVal, defVal, heroTarget, dice, drawnCard);
+  const report = dealDamage("勇者", atkType, atkVal, defVal, heroTarget, dice, drawnCard, {
+    defIgnoreRatio,
+    finalDmgMult,
+    ignoreHalfShield,
+    extraTags,
+  });
   const enemyLostHp = heroTarget.hp < enemyHpBefore;
   let enemyShieldState = "none";
   if (enemyShieldBefore > 0 && heroTarget.shield === 0 && report.toShield > 0) {
@@ -1651,21 +2248,69 @@ async function heroAttack(atkType) {
   await Promise.all([slashP, hitP]);
   await sleep(320);
 
+  // 結算攻擊命中後的附加技能效果（墨焰燃蝕、文字汲取、文字汲盾）
+  const attackHit = !(gameMode === "dice" && dice === 0);
+  if (attackHit && hero.turnBuff) {
+    if (hero.turnBuff.applyBurn && enemy.hp > 0) {
+      enemy.burnTurns = 3;
+      const tickVal = Math.max(1, Math.floor(enemy.maxHp / 16));
+      log(`【墨焰燃蝕】${enemy.name}被字元烈焰引燃，陷入【燃燒】狀態（每回合結束扣除 ${tickVal} 點生命，持續 3 回合）！`, "hit");
+      renderStatus();
+    }
+    if (hero.turnBuff.leechHpRatio && report.toHp > 0) {
+      const healAmt = Math.floor(report.toHp * hero.turnBuff.leechHpRatio);
+      if (healAmt > 0) {
+        const beforeHp = hero.hp;
+        hero.hp = Math.min(hero.maxHp, hero.hp + healAmt);
+        const actualHealed = hero.hp - beforeHp;
+        log(`【文字汲取】勇者將敵方減少的 ${report.toHp} 點生命轉化為生機，回復 ${actualHealed} 點生命（目前生命 ${hero.hp} / ${hero.maxHp}）！`, "hit");
+        renderStatus();
+      }
+    }
+    if (hero.turnBuff.leechShieldRatio && report.toHp > 0) {
+      const shdAmt = Math.floor(report.toHp * hero.turnBuff.leechShieldRatio);
+      if (shdAmt > 0) {
+        hero.shield += shdAmt;
+        log(`【文字汲盾】勇者將敵方減少的 ${report.toHp} 點生命轉化為屏障，獲得 ${shdAmt} 點護盾（目前護盾 ${hero.shield}）！`, "hit");
+        renderStatus();
+      }
+    }
+  }
+
+  await finishHeroTurnAndEnemyAct(true);
+}
+
+// 勇者完成本回合行動（普攻或跳過攻擊技能）後的統一結算流程：燃燒扣血 ➔ 階段判定 ➔ 技能 CD 遞減 ➔ 敵方行動
+async function finishHeroTurnAndEnemyAct(didAttackAction) {
+  if (!enemy) return;
+
   // 二階段：勇者第一次攻擊後的專屬台詞（半血前 enemy.name 為 @$+%^&¥，完全不出現真魔王或沙坦）
-  if (enemy.isPhase2Boss && !enemy.firstAttackDone) {
+  if (didAttackAction && enemy.isPhase2Boss && !enemy.firstAttackDone) {
     enemy.firstAttackDone = true;
     log(`${enemy.name}：「啊啊你爲甚麼會有前勇者的武器，這個混蛋竟然死後也不安寧！！！」`, "text-curse");
   }
 
   if (enemy.hp <= 0) { await winBattle(); return; }
 
-  // 一階段魔王半血掙扎加劇提示（完全不顯示任何有關前勇者的部分，只顯示「魔王突然劇烈掙扎」）
+  // 結算敵方身上的【燃燒】持續傷害（每回合結束扣除 1/16 最大生命真實傷害）
+  if (enemy.burnTurns && enemy.burnTurns > 0 && enemy.hp > 0) {
+    const burnDmg = Math.max(1, Math.floor(enemy.maxHp / 16));
+    enemy.hp = Math.max(0, enemy.hp - burnDmg);
+    enemy.burnTurns--;
+    renderStatus();
+    log(`【燃燒】字元烈焰持續灼燒${enemy.name}，造成 ${burnDmg} 點真實傷害（剩餘持續 ${enemy.burnTurns} 回合）！`, "hit");
+    await enemyHitAnim(true, "none");
+    await sleep(240);
+    if (enemy.hp <= 0) { await winBattle(); return; }
+  }
+
+  // 一階段魔王半血掙扎加劇提示
   if (enemy.isBoss && !enemy.halfHpTriggered && enemy.hp <= enemy.maxHp * BOSS_STRUGGLE_HP_RATIO) {
     enemy.halfHpTriggered = true;
     log(BOSS_STRUGGLE_TEXT, "text-curse");
   }
 
-  // 二階段半血（HP <= 67）顯露真名「文字.沙坦」並進入狂暴狀態（雙攻提升為 ×1.35 ＋ 立即重鑄 10 點原典黑盾）
+  // 二階段半血（HP <= 67）顯露真名「文字.沙坦」並進入狂暴狀態
   if (enemy.isPhase2Boss && !enemy.halfHpTriggered && enemy.hp <= enemy.maxHp * PHASE2_BOSS_RAGE_HP_RATIO) {
     enemy.halfHpTriggered = true;
     const oldHiddenName = enemy.name;
@@ -1686,20 +2331,27 @@ async function heroAttack(atkType) {
     renderStatus();
   }
 
+  // 完整冷卻間隔回合制：遞減「非本回合剛施放」之技能冷卻時間
+  if (hero && hero.skills) {
+    hero.skills.forEach(sk => {
+      if (sk.id !== hero.usedSkillThisTurn && (hero.skillCooldowns[sk.id] || 0) > 0) {
+        hero.skillCooldowns[sk.id]--;
+      }
+    });
+  }
+
   await enemyAttack();
-  if (!enemy || hero.hp <= 0) return;
+  if (!enemy || hero.hp <= 0 || enemy.hp <= 0) return;
 
   // 渾沌怪與一階段魔王每回合結束後動態切換排斥弱點（二階段不減防）
   if (enemy.type === "chaos" && !enemy.isPhase2Boss) {
     refreshChaosWeakness(true);
   }
-  renderStatus();
-  showCombatButtons();
+  beginHeroTurn();
 }
 
 async function enemyAttack() {
-  // 一階段魔王掙扎判定（初期 15%，半血以下 30%）：
-  // 嚴格不顯示任何有關前勇者的部分，只顯示「魔王突然劇烈掙扎」➔ 50%「魔王揮空並且傷到了自己」／ 50%「魔王暴走！！！」
+  // 一階段魔王掙扎判定（初期 15%，半血以下 30%）
   let berserkBonus = 0;
   if (enemy.isBoss) {
     const struggleChance = (enemy.hp <= enemy.maxHp * BOSS_STRUGGLE_HP_RATIO)
@@ -1752,7 +2404,18 @@ async function enemyAttack() {
   const heroShieldBefore = hero.shield;
   const target = { shield: hero.shield, hp: hero.hp };
   const hpBefore = hero.hp;
-  const report = dealDamage(enemy.name, atkType, atkVal, defVal, target, dice, drawnCard);
+  const targetDmgReduceRatio = (hero.turnBuff && hero.turnBuff.dmgReduceRatio) ? hero.turnBuff.dmgReduceRatio : 0;
+  const targetCrystalWall = !!(hero.turnBuff && hero.turnBuff.crystalWall);
+  const extraEnemyTags = [];
+  if (targetDmgReduceRatio > 0) {
+    extraEnemyTags.push(`全神蓄勢：減傷${Math.round(targetDmgReduceRatio * 100)}%`);
+  }
+
+  const report = dealDamage(enemy.name, atkType, atkVal, defVal, target, dice, drawnCard, {
+    targetDmgReduceRatio,
+    targetCrystalWall,
+    extraTags: extraEnemyTags,
+  });
 
   // 檢查是否觸發飾品【勇者之劍】殘魂免疫致命傷（方案 B：最多 2 次，鎖 1 血並重鑄滿額護盾，每次倍率下降 0.15）
   const acc = hero.equip.accessory;
@@ -1760,6 +2423,7 @@ async function enemyAttack() {
     acc.blocksLeft--;
     acc.atkMult = Math.max(1.0, Math.round((acc.atkMult - HERO_SWORD_BLOCK_DECAY) * 100) / 100);
     hero.shield = calcStats(HERO_BASE, hero.equip, true).shield;
+    hero.maxBattleShield = Math.max(hero.maxBattleShield || 0, hero.shield);
     hero.hp = 1; // 保留 1 點生命（鎖 1 血並重鑄護盾）
     logCombatReport(false, report.mainLine, report.formulaLine);
     renderStatus();
@@ -1805,7 +2469,45 @@ async function enemyAttack() {
     heroShieldState = "block";
   }
   await heroHitAnim(heroLostHp, heroShieldState);
-  if (hero.hp <= 0) loseGame();
+  if (hero.hp <= 0) {
+    loseGame();
+    return;
+  }
+
+  // 結算勇者【護盾反震】反擊傷害：護盾受傷 × 1.0 + 生命受傷 × 0.8（先扣敵盾再扣敵血）
+  if (enemy && enemy.hp > 0 && hero.turnBuff && hero.turnBuff.reflectActive && (report.toShield > 0 || report.toHp > 0)) {
+    const reflectDmg = Math.floor(report.toShield * 1.0 + report.toHp * 0.8);
+    if (reflectDmg > 0) {
+      const eShieldBefore = enemy.shield;
+      const eHpBefore = enemy.hp;
+      const eShdHit = Math.min(enemy.shield, reflectDmg);
+      const eHpHit = reflectDmg - eShdHit;
+      enemy.shield -= eShdHit;
+      enemy.hp -= eHpHit;
+      renderStatus();
+
+      const parts = [];
+      if (eShdHit > 0) parts.push(`護盾 −${eShdHit}`);
+      if (eHpHit > 0) parts.push(`生命 −${eHpHit}`);
+      logCombatReport(
+        true,
+        `勇者觸發【護盾反震】 ➔ 反擊造成 ${reflectDmg} 點傷害！（${parts.join("，")}）`,
+        `護盾受傷 ${report.toShield} × 1 + 生命受傷 ${report.toHp} × 0.8 = ${reflectDmg} 反擊傷害`
+      );
+      let eShdState = "none";
+      if (eShieldBefore > 0 && enemy.shield === 0 && eShdHit > 0) {
+        eShdState = "shatter";
+      } else if (eShdHit > 0 && enemy.hp === eHpBefore && enemy.shield > 0) {
+        eShdState = "block";
+      }
+      await enemyHitAnim(enemy.hp < eHpBefore, eShdState);
+      await sleep(240);
+      if (enemy.hp <= 0) {
+        await winBattle();
+        return;
+      }
+    }
+  }
 }
 
 async function winBattle() {
@@ -1832,22 +2534,25 @@ async function winBattle() {
       return;
     }
 
-    // 正常路線：文字魔王倒下後，勇者發現其身分為「前勇者」，獲得【勇者之劍】（方案 B：回復 80% 最大生命、初始 ×1.45 攻擊、2 次殘魂擋死）
+    // 正常路線：文字魔王倒下後，勇者發現其身分為「前勇者」，獲得【勇者之劍】
     const swordItem = { ...HERO_SWORD_ITEM };
     hero.equip.accessory = swordItem;
     const healGain = Math.max(1, Math.floor(hero.maxHp * HERO_SWORD_HEAL_RATIO));
     const beforeHp = hero.hp;
     hero.hp = Math.min(hero.maxHp, hero.hp + healGain);
     const actualHealed = hero.hp - beforeHp;
+    const clearLines = (hero.skills && hero.skills.length > 0)
+      ? PHASE1_CLEAR_TEXTS
+      : (typeof PHASE1_CLEAR_TEXTS_NO_SKILL !== "undefined" ? PHASE1_CLEAR_TEXTS_NO_SKILL : PHASE1_CLEAR_TEXTS);
     sep();
     log("文字魔王倒下了……他身上的文字枷鎖出現裂痕，露出了底下的真容——竟然是前勇者！", "big");
     log(`你獲得了前勇者的遺物飾品：【${swordItem.name}】（${swordItem.desc}）！勇者生命回復 ${actualHealed} 點（目前生命 ${hero.hp} / ${hero.maxHp}）！`, "hit");
-    for (const line of PHASE1_CLEAR_TEXTS) {
+    for (const line of clearLines) {
       log(line, "text-curse");
     }
     renderStatus();
 
-    await playStorySequence(PHASE1_CLEAR_TEXTS);
+    await playStorySequence(clearLines);
 
     sep();
     log(`── 意識墜入精神世界，${PHASE2_BOSS_HIDDEN_NAME}降臨！`, "big");
@@ -1874,16 +2579,13 @@ async function winBattle() {
     return;
   }
 
-  // 第九版更新（常規小怪擊敗）：
-  // 保留敵人面板在 0 HP 狀態讓玩家看清血條歸零與白色殘影，先播放全螢幕黃字文字消失轉場（2.2秒），結束後回到戰鬥框顯示「繼續前進」按鈕
+  // 常規小怪擊敗：保留敵人面板在 0 HP 狀態讓玩家看清血條歸零與白色殘影，先播放全螢幕黃字文字消失轉場（2.2秒），結束後回到戰鬥框顯示「繼續前進」按鈕
   const defeatedEnemy = enemy;
   const isNarrowVictory = hero.hp < (hero.maxHp * 0.25);
   const defeatMsg = isNarrowVictory ? `險勝${defeatedEnemy.name}….` : `打敗${defeatedEnemy.name}了`;
 
-  // 播放全螢幕黃字文字消失轉場動畫
   await playFadeOutTextScreen(defeatMsg, "#ffd23f", false, 2200);
 
-  // 在戰鬥日誌最下方加上獲勝提示卡片
   if ($battleLog) {
     const vDiv = document.createElement("div");
     vDiv.className = "combat-report victory-report";
@@ -1892,7 +2594,6 @@ async function winBattle() {
     $battleLog.scrollTop = $battleLog.scrollHeight;
   }
 
-  // 轉場完結後回到戰鬥對話框，顯示「繼續前進」按鈕
   setChoices([
     {
       label: "繼續前進",

@@ -294,3 +294,152 @@ const POKER_PIP_LAYOUTS = {
   9: [[26, 14, false], [74, 14, false], [26, 38, false], [74, 38, false], [50, 50, false], [26, 62, true], [74, 62, true], [26, 86, true], [74, 86, true]],
   10: [[26, 14, false], [74, 14, false], [50, 26, false], [26, 38, false], [74, 38, false], [26, 62, true], [74, 62, true], [50, 74, true], [26, 86, true], [74, 86, true]],
 };
+
+
+/* =========================================================
+   第十一版（v11）新增：15種局內技能資料庫（三大類別各5種，全數物魔通用）
+   按鈕邊框顏色：攻擊類（紅色 #ff4d4d）、防禦類（藍色 #4da6ff）、蓄力類（綠色 #38d399）
+   ========================================================= */
+const SKILLS = [
+  // ── 1. 【攻擊類】（紅色邊框，專注破盾、真傷、燃燒、破防與吸血） ──
+  {
+    id: "shield_slash",
+    name: "破盾斬",
+    category: "attack",
+    categoryLabel: "攻擊類",
+    cd: 3,
+    skipAttack: true,
+    desc: "冷卻 3 回合｜跳過攻擊：免擲骰／免抽牌必中，依雙攻中較高者造成 1.4 倍無視防禦基礎傷害；對敵方護盾造成雙倍（200%）摧毀效果，護盾歸零後剩餘基礎傷害直接扣除生命。",
+  },
+  {
+    id: "desperate_strike",
+    name: "捨身決絕",
+    category: "attack",
+    categoryLabel: "攻擊類",
+    cd: 4,
+    skipAttack: true,
+    desc: "冷卻 4 回合｜跳過攻擊：燃燒自身鮮血，消耗當前 20% 生命值（最低保留 1 點生命不致死），對敵方造成（消耗生命 × 2.5 + 60% 較高攻擊力）的真實傷害（完全無視護盾與防禦）。",
+  },
+  {
+    id: "ink_flame",
+    name: "墨焰燃蝕",
+    category: "attack",
+    categoryLabel: "攻擊類",
+    cd: 3,
+    skipAttack: false,
+    desc: "冷卻 3 回合｜不跳過攻擊：引燃字元之火，本回合發動的物理或魔法攻擊命中後，使目標陷入【燃燒】狀態（每回合結束扣除目標最大生命的 1/16 真實傷害，持續 3 回合）。",
+  },
+  {
+    id: "flaw_insight",
+    name: "破綻洞悉",
+    category: "attack",
+    categoryLabel: "攻擊類",
+    cd: 2,
+    skipAttack: false,
+    desc: "冷卻 2 回合｜不跳過攻擊：看破敵方文字結構裂隙，使本回合發動的物理或魔法攻擊無視目標 40% 的對應防禦力。",
+  },
+  {
+    id: "word_leech",
+    name: "文字汲取",
+    category: "attack",
+    categoryLabel: "攻擊類",
+    cd: 3,
+    skipAttack: false,
+    desc: "冷卻 3 回合｜不跳過攻擊：本回合發動的物理或魔法攻擊命中後，將本次攻擊造成目標減少的生命值（實際扣血，不含護盾抵扣）的 35% 轉化為自身生命回復。",
+  },
+
+  // ── 2. 【防禦類】（藍色邊框，全面強化護盾生成、反震、減傷溢傷保護、吸盾與雙回） ──
+  {
+    id: "shield_rebuild",
+    name: "護盾重構",
+    category: "defense",
+    categoryLabel: "防禦類",
+    cd: 3,
+    skipAttack: true,
+    desc: "冷卻 3 回合｜跳過攻擊：念動防禦咒文專注構築防線，立即為自身生成（6 + 35% 較高防禦力）的護盾值（可突破初始護盾上限）。",
+  },
+  {
+    id: "shield_reflect",
+    name: "護盾反震",
+    category: "defense",
+    categoryLabel: "防禦類",
+    cd: 3,
+    skipAttack: false,
+    desc: "冷卻 3 回合｜不跳過攻擊：本回合受到敵方傷害時發動反擊，造成（護盾受到的傷害 × 1 + 生命受到的傷害 × 0.8）的反擊傷害（需先擊破敵方護盾後才扣除生命）。",
+  },
+  {
+    id: "crystal_wall",
+    name: "晶化壁壘",
+    category: "defense",
+    categoryLabel: "防禦類",
+    cd: 4,
+    skipAttack: false,
+    desc: "冷卻 4 回合｜不跳過攻擊：立即補充 5 點護盾；本回合內護盾受到的所有傷害降低 50%，且若護盾被擊碎，溢出的剩餘傷害完全無效化（生命絕不扣血）。",
+  },
+  {
+    id: "word_shield_leech",
+    name: "文字汲盾",
+    category: "defense",
+    categoryLabel: "防禦類",
+    cd: 3,
+    skipAttack: false,
+    desc: "冷卻 3 回合｜不跳過攻擊：本回合發動的物理或魔法攻擊命中後，將本次攻擊造成目標減少的生命值（實際扣血，不含護盾抵扣）的 35% 轉化為自身護盾值。",
+  },
+  {
+    id: "barrier_revive",
+    name: "屏障復甦",
+    category: "defense",
+    categoryLabel: "防禦類",
+    cd: 4,
+    skipAttack: false,
+    desc: "冷卻 4 回合｜不跳過攻擊：調動防護能量溫養身軀，無論當前有無護盾，立即回復 15% 最大生命（保底 3 點），並重新生成 8 點護盾。",
+  },
+
+  // ── 3. 【蓄力類】（綠色邊框，當回合跳過攻擊蓄勢、下一回合顯露強大爆發效果） ──
+  {
+    id: "full_focus",
+    name: "全神蓄勢",
+    category: "charge",
+    categoryLabel: "蓄力類",
+    cd: 3,
+    skipAttack: true,
+    desc: "冷卻 3 回合｜跳過攻擊：本回合專注聚氣，受到的所有傷害降低 30%；下一回合發動的物理或魔法攻擊造成 2.25 倍最終總傷害。",
+  },
+  {
+    id: "condense_qi",
+    name: "凝神聚氣",
+    category: "charge",
+    categoryLabel: "蓄力類",
+    cd: 3,
+    skipAttack: true,
+    desc: "冷卻 3 回合｜跳過攻擊：本回合鎖定命門；下一回合攻擊基礎攻擊力臨時 +25%，且必定觸發極限點數與破甲穿盾（骰子必出 20 大成功／撲克必出同花色 K 並觸發 A 穿甲）。",
+  },
+  {
+    id: "limit_overload",
+    name: "極限過載",
+    category: "charge",
+    categoryLabel: "蓄力類",
+    cd: 4,
+    skipAttack: true,
+    desc: "冷卻 4 回合｜跳過攻擊：本回合壓縮能量並立即獲得 6 點護盾；下一回合發動的物理或魔法攻擊，未計算防禦前的基礎攻擊力直接翻倍（×2.0），且無視敵方 50% 護盾。",
+  },
+  {
+    id: "bulwark_convert",
+    name: "壁壘轉化",
+    category: "charge",
+    categoryLabel: "蓄力類",
+    cd: 3,
+    skipAttack: true,
+    desc: "冷卻 3 回合｜跳過攻擊：本回合先補充 6 點護盾再將總護盾直接翻倍（×2）；下一回合發動攻擊時，將當前剩餘護盾值的 100% 全額附加至基礎攻擊力上（護盾保留不消耗）。",
+  },
+  {
+    id: "desperate_break",
+    name: "絕境突破",
+    category: "charge",
+    categoryLabel: "蓄力類",
+    cd: 5,
+    skipAttack: true,
+    hpLimitRatio: 0.40,
+    desc: "冷卻 5 回合｜跳過攻擊（限生命 ≤40% 施放）：本回合立即回復 20% 最大生命（保底 4 點）；下一回合立即重置另一個技能的冷卻時間，且雙攻雙防永久 +5（持續至戰鬥結束）。",
+  },
+];

@@ -23,6 +23,7 @@ body {
 
 /* ===== 第 1 部分：頂部勇者資訊欄（微藍光外框 + 極簡 3 行 + 可展開裝備抽屜） ===== */
 #status {
+  position: relative;
   background: #03060c;
   border: 1px solid #4da6ff;
   box-shadow: 0 0 12px rgba(77, 166, 255, 0.35), inset 0 0 8px rgba(77, 166, 255, 0.12);
@@ -1391,4 +1392,146 @@ body {
   .shatter-ice-shield .ice-shard {
     animation: none !important;
   }
+}
+
+
+/* ===== 第十一版（v11）新增：局內技能系統樣式（技能按鈕紅/藍/綠分類邊框、頂部技能與裝備浮動詳情版面） ===== */
+
+/* 頂部【技能 ▼】與【裝備 ▼】向下覆蓋展開的獨立浮動小版面（附關閉按鈕，不擠壓戰鬥與對話框高度） */
+#equip-drawer,
+#skill-drawer {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: -1px;
+  right: -1px;
+  z-index: 24;
+  margin-top: 0;
+  padding: 10px 14px 12px;
+  background: #050811;
+  border: 1px solid #4da6ff;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.94), 0 0 14px rgba(77, 166, 255, 0.35);
+  border-radius: 2px;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #d0d8e8;
+  max-height: 68vh;
+  overflow-y: auto;
+}
+
+.floating-drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 6px;
+  margin-bottom: 2px;
+  border-bottom: 1px dashed rgba(77, 166, 255, 0.45);
+  font-weight: bold;
+  color: #7ec8ff;
+}
+
+.skill-detail-card {
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid #555;
+  border-left-width: 4px;
+  border-radius: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.skill-detail-card.cat-attack {
+  border-color: rgba(255, 77, 77, 0.55);
+  border-left-color: #ff4d4d;
+}
+.skill-detail-card.cat-defense {
+  border-color: rgba(77, 166, 255, 0.55);
+  border-left-color: #4da6ff;
+}
+.skill-detail-card.cat-charge {
+  border-color: rgba(56, 211, 153, 0.55);
+  border-left-color: #38d399;
+}
+.skill-detail-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: bold;
+  color: #ffffff;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.skill-cat-badge {
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: 2px;
+  font-weight: bold;
+}
+.skill-cat-badge.cat-attack {
+  color: #ff8080;
+  border: 1px solid #ff4d4d;
+  background: rgba(255, 77, 77, 0.12);
+}
+.skill-cat-badge.cat-defense {
+  color: #7ec8ff;
+  border: 1px solid #4da6ff;
+  background: rgba(77, 166, 255, 0.12);
+}
+.skill-cat-badge.cat-charge {
+  color: #6ee7b7;
+  border: 1px solid #38d399;
+  background: rgba(56, 211, 153, 0.12);
+}
+.skill-detail-desc {
+  font-size: 13.5px;
+  color: #c8d0dc;
+  line-height: 1.5;
+}
+
+/* 技能按鈕分類邊框顏色（攻擊：紅色 #ff4d4d，防禦：藍色 #4da6ff，蓄力：綠色 #38d399） */
+#choices button.skill-btn-attack {
+  border: 1.5px solid #ff4d4d;
+  box-shadow: 0 0 8px rgba(255, 77, 77, 0.28), inset 3px 0 0 #ff4d4d;
+}
+#choices button.skill-btn-defense {
+  border: 1.5px solid #4da6ff;
+  box-shadow: 0 0 8px rgba(77, 166, 255, 0.28), inset 3px 0 0 #4da6ff;
+}
+#choices button.skill-btn-charge {
+  border: 1.5px solid #38d399;
+  box-shadow: 0 0 8px rgba(56, 211, 153, 0.28), inset 3px 0 0 #38d399;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  #choices button.skill-btn-attack:not(:disabled):hover,
+  #choices button.skill-btn-attack:not(:disabled):focus-visible {
+    background: #2b0b0e;
+    color: #ffffff;
+    border-color: #ff6b6b;
+    box-shadow: 0 0 14px rgba(255, 77, 77, 0.55), inset 4px 0 0 #ff4d4d;
+  }
+  #choices button.skill-btn-defense:not(:disabled):hover,
+  #choices button.skill-btn-defense:not(:disabled):focus-visible {
+    background: #08192b;
+    color: #ffffff;
+    border-color: #7ec8ff;
+    box-shadow: 0 0 14px rgba(77, 166, 255, 0.55), inset 4px 0 0 #4da6ff;
+  }
+  #choices button.skill-btn-charge:not(:disabled):hover,
+  #choices button.skill-btn-charge:not(:disabled):focus-visible {
+    background: #072218;
+    color: #ffffff;
+    border-color: #6ee7b7;
+    box-shadow: 0 0 14px rgba(56, 211, 153, 0.55), inset 4px 0 0 #38d399;
+  }
+}
+
+/* 冷卻中或未達條件之禁用技能按鈕：保留分類邊框色系但降低亮度並鎖定點擊 */
+#choices button:disabled,
+#choices button.skill-btn-disabled {
+  opacity: 0.55;
+  color: #888888 !important;
+  background: #050507 !important;
+  cursor: not-allowed;
 }
