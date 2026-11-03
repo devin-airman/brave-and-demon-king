@@ -11,6 +11,7 @@ let lastEnemyHp = null;
 let lastHeroShield = 0;
 let lastEnemyShield = null;
 let lastRenderedEnemyRef = null;
+let lastRenderedBuffKeys = new Set();
 let gameMode = "dice"; // "dice" (0–20 骰子模式) 或 "poker" (1–13 撲克模式)
 let lastDrawnCard = null; // 紀錄最近一次抽出的撲克牌資訊
 let equipExpanded = false; // 頂部裝備浮動版面展開狀態
@@ -336,34 +337,63 @@ async function playChargeCondenseToBuffAnim(onBuffAppearCallback) {
   await playParticlesBetween($dialogueStage, $targetTag, "#38d399", 1, 700);
 
   if (onBuffAppearCallback) onBuffAppearCallback();
-  const $tag = document.getElementById("hero-panel-tag");
-  if ($tag) replayClass($tag, "pop-in");
 }
 
-// 【蓄力類】當 Buff 效果消耗後：Buff 標籤化為綠色光點向上向外飛走消失
+// 【非蓄力類待發技能】：施放時光點飛向頂部 Buff 顯示區並生成對應顏色 Buff 標籤
+async function playSkillActivateToBuffAnim($fromEl, colorHex, onBuffAppearCallback) {
+  const $source = $fromEl || $dialogueStage;
+  const $targetTag = document.getElementById("hero-panel-tag") || document.getElementById("hero-panel-title") || $status;
+  if ($source && $targetTag) {
+    await playParticlesBetween($source, $targetTag, colorHex || "#38d399", 1, 560);
+  }
+  if (onBuffAppearCallback) onBuffAppearCallback();
+}
+
+// 當指定 Buff 效果消耗完畢時：對應的 Buff 標籤化為對應顏色（紅／黃／綠）光點向上向外飛走消失
+async function playSpecificBuffsFlyAwayAnim(buffSpecs) {
+  const $tagContainer = document.getElementById("hero-panel-tag");
+  if (!$tagContainer || !$fxFlightLayer || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (!Array.isArray(buffSpecs) || buffSpecs.length === 0) return;
+
+  const animations = [];
+  buffSpecs.forEach(({ keyPrefix, color }) => {
+    const pills = Array.from($tagContainer.querySelectorAll(".hero-buff-pill")).filter(el => {
+      const k = el.dataset.buffKey || "";
+      return k === keyPrefix || k.startsWith(keyPrefix);
+    });
+    const targets = pills.length > 0 ? pills : [$tagContainer];
+    targets.forEach((el, idx) => {
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 && r.height <= 0) return;
+      const sx = r.left + r.width * 0.5;
+      const sy = r.top + r.height * 0.5;
+
+      const dot = document.createElement("div");
+      dot.className = "fx-flying-dot";
+      dot.style.setProperty("--dot-color", color || "#38d399");
+      dot.style.setProperty("--dot-size", "10px");
+      $fxFlightLayer.appendChild(dot);
+
+      const offsetX = 48 + idx * 18;
+      const anim = dot.animate([
+        { left: sx + "px", top: sy + "px", opacity: 1, transform: "translate(-50%, -50%) scale(1.1)" },
+        { left: (sx + offsetX) + "px", top: Math.max(4, sy - 42) + "px", opacity: 0, transform: "translate(-50%, -50%) scale(0.2)" },
+      ], { duration: 840, easing: "ease-out", fill: "forwards" });
+      animations.push(anim.finished.catch(() => {}).then(() => { dot.remove(); }));
+    });
+  });
+
+  if (animations.length > 0) {
+    await Promise.all(animations);
+  }
+}
+
+// 向下相容舊呼叫：預設飛走所有蓄力類 Buff 綠光點
 async function playBuffFlyAwayAnim() {
-  const $tag = document.getElementById("hero-panel-tag");
-  if (!$tag || !$fxFlightLayer || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const r = $tag.getBoundingClientRect();
-  if (r.width <= 0) return;
-  const sx = r.left + r.width * 0.5;
-  const sy = r.top + r.height * 0.5;
-
-  const dot = document.createElement("div");
-  dot.className = "fx-flying-dot";
-  dot.style.setProperty("--dot-color", "#38d399");
-  dot.style.setProperty("--dot-size", "10px");
-  $fxFlightLayer.appendChild(dot);
-
-  const anim = dot.animate([
-    { left: sx + "px", top: sy + "px", opacity: 1, transform: "translate(-50%, -50%) scale(1.1)" },
-    { left: (sx + 60) + "px", top: Math.max(4, sy - 42) + "px", opacity: 0, transform: "translate(-50%, -50%) scale(0.2)" },
-  ], { duration: 840, easing: "ease-out", fill: "forwards" });
-  await anim.finished.catch(() => {});
-  dot.remove();
+  await playSpecificBuffsFlyAwayAnim([{ keyPrefix: "charge_", color: "#38d399" }]);
 }
 
-// 【護盾反震】：受擊後從勇者對話框向外擴散一圈黃色圓形波紋，碰到敵人面板時造成傷害，並持續擴散至螢幕邊界
+// 【護盾反震】：受擊同時從勇者對話框向外擴散一圈黃色圓形波紋，碰到敵人面板時造成傷害，並持續擴散至螢幕邊界
 async function playReflectWaveAnim(onTouchEnemyCallback) {
   if (!$dialogueStage || !$fxFlightLayer || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     if (onTouchEnemyCallback) await onTouchEnemyCallback();
@@ -398,26 +428,122 @@ async function playReflectWaveAnim(onTouchEnemyCallback) {
   ring.remove();
 }
 
-// 取得頂部勇者面板常駐 Buff 標籤顯示文字
-function getHeroBuffTagText() {
-  if (!enemy || !hero) return "";
-  const tags = [];
+// 取得頂部勇者面板所有非立即生效／常駐 Buff 標籤陣列（支援多個蓄力疊加與非蓄力技能 Buff 並列顯示）
+function getHeroActiveBuffItems() {
+  if (!enemy || !hero) return [];
+  const items = [];
   if (hero.battleStatBonus && hero.battleStatBonus > 0) {
-    tags.push(`［✨突破：全屬性+${hero.battleStatBonus}］`);
+    items.push({
+      key: "perm_break",
+      label: `［✨突破：全屬性+${hero.battleStatBonus}］`,
+      category: "charge",
+      color: "#38d399",
+    });
   }
-  const chargeId = hero.activeChargeBuff || (hero.chargeBuffVisible ? hero.pendingChargeSkill : null);
-  if (chargeId === "limit_overload") {
-    tags.push("［⚡蓄力：攻擊×2.0＋穿盾50%］");
-  } else if (chargeId === "condense_qi") {
-    tags.push("［🎯凝神：攻擊+25%＋極限穿甲］");
-  } else if (chargeId === "bulwark_convert") {
-    tags.push(`［🛡️壁壘：攻擊+${Math.max(0, hero.shield)}（護盾附加）］`);
-  } else if (chargeId === "full_focus") {
-    tags.push("［💥聚氣：總傷害×2.25］");
-  } else if (chargeId === "desperate_break") {
-    tags.push("［✨突破待發：下回全屬性+5＋重置CD］");
+  if (hero.pendingDesperateBreak) {
+    items.push({
+      key: "pending_break",
+      label: "［✨突破待發：下回全屬性+5＋重置CD］",
+      category: "charge",
+      color: "#38d399",
+    });
   }
-  return tags.join(" ");
+  const chargeList = Array.isArray(hero.chargeBuffs) ? hero.chargeBuffs : [];
+  chargeList.forEach((chargeId, idx) => {
+    if (chargeId === "limit_overload") {
+      items.push({
+        key: `charge_limit_overload_${idx}`,
+        label: "［⚡過載：攻擊×2.0＋穿盾50%］",
+        category: "charge",
+        color: "#38d399",
+      });
+    } else if (chargeId === "condense_qi") {
+      items.push({
+        key: `charge_condense_qi_${idx}`,
+        label: "［🎯凝神：攻擊+25%＋極限穿甲］",
+        category: "charge",
+        color: "#38d399",
+      });
+    } else if (chargeId === "bulwark_convert") {
+      items.push({
+        key: `charge_bulwark_convert_${idx}`,
+        label: `［🛡️壁壘：攻擊+${Math.max(0, hero.shield)}（護盾附加）］`,
+        category: "charge",
+        color: "#38d399",
+      });
+    } else if (chargeId === "full_focus") {
+      items.push({
+        key: `charge_full_focus_${idx}`,
+        label: "［💥聚氣：總傷害×2.25］",
+        category: "charge",
+        color: "#38d399",
+      });
+    }
+  });
+
+  if (hero.turnBuff) {
+    if (hero.turnBuff.dmgReduceRatio && hero.turnBuff.dmgReduceRatio > 0) {
+      items.push({
+        key: "turn_dmg_reduce",
+        label: `［🛡️全神：本回減傷${Math.round(hero.turnBuff.dmgReduceRatio * 100)}%］`,
+        category: "charge",
+        color: "#38d399",
+      });
+    }
+    if (hero.turnBuff.reflectActive) {
+      items.push({
+        key: "turn_reflect",
+        label: "［⚡反震：本回受擊反彈］",
+        category: "defense",
+        color: "#ffd23f",
+      });
+    }
+    if (hero.turnBuff.crystalWall) {
+      items.push({
+        key: "turn_crystal_wall",
+        label: "［💎晶化：護盾減傷50%＋破盾免傷］",
+        category: "defense",
+        color: "#ffd23f",
+      });
+    }
+    if (hero.turnBuff.applyBurn) {
+      items.push({
+        key: "turn_ink_flame",
+        label: "［🔥墨焰：普攻附加燃燒］",
+        category: "attack",
+        color: "#ff4d4d",
+      });
+    }
+    if (hero.turnBuff.defIgnoreRatio && hero.turnBuff.defIgnoreRatio > 0) {
+      items.push({
+        key: "turn_flaw_insight",
+        label: "［🎯洞悉：無視40%防禦］",
+        category: "attack",
+        color: "#ff4d4d",
+      });
+    }
+    if (hero.turnBuff.leechHpRatio && hero.turnBuff.leechHpRatio > 0) {
+      items.push({
+        key: "turn_word_leech",
+        label: "［🩸汲取：普攻吸血35%］",
+        category: "attack",
+        color: "#ff4d4d",
+      });
+    }
+    if (hero.turnBuff.leechShieldRatio && hero.turnBuff.leechShieldRatio > 0) {
+      items.push({
+        key: "turn_word_shield_leech",
+        label: "［🛡️汲盾：普攻轉盾35%］",
+        category: "defense",
+        color: "#ffd23f",
+      });
+    }
+  }
+  return items;
+}
+
+function getHeroBuffTagText() {
+  return getHeroActiveBuffItems().map(i => i.label).join(" ");
 }
 
 // 第十版（v10）新增：統一產生勇者與敵人的撲克牌面下方特殊效果提示（選項 A：花色加攻 ＋ K/A 穿盾雙行提示）
@@ -810,6 +936,7 @@ function renderStatus() {
   let $heroHpFill = $status.querySelector(".bar-fill.hp-hero");
   if (!$heroHpFill) {
     $status.innerHTML = `
+      <div class="hero-status-hex-overlay" id="hero-status-hex-overlay" aria-hidden="true"></div>
       <div class="panel-row-top">
         <div class="panel-title-group">
           <button type="button" class="tester-btn" id="btn-tester">測試者</button>
@@ -897,9 +1024,18 @@ function renderStatus() {
       $heroHpGhost.style.width = hpPct + "%";
     }
   }
+  const isDmgReduceProtected = !!(enemy && hero && hero.turnBuff && hero.turnBuff.dmgReduceRatio > 0);
+  $status.classList.toggle("status-dmg-reduce-active", isDmgReduceProtected);
+
   const $heroTag = document.getElementById("hero-panel-tag");
   if ($heroTag) {
-    $heroTag.textContent = getHeroBuffTagText();
+    const buffItems = getHeroActiveBuffItems();
+    const nextKeys = new Set(buffItems.map(b => b.key));
+    $heroTag.innerHTML = buffItems.map(item => {
+      const isNew = !lastRenderedBuffKeys.has(item.key);
+      return `<span class="hero-buff-pill buff-cat-${item.category}${isNew ? " pop-in" : ""}" data-buff-key="${escapeHtml(item.key)}">${escapeHtml(item.label)}</span>`;
+    }).join("");
+    lastRenderedBuffKeys = nextKeys;
   }
 
   const $heroShYellow = document.getElementById("hero-sh-fill-yellow");
@@ -1408,20 +1544,71 @@ async function swordAnim() {
 const ALL_SLASH_CLASSES = [
   "slash-hit",
   "slash-x-red",
-  "slash-bl-tr-crimson",
-  "slash-flame-orange",
-  "slash-thick-red-edge",
-  "slash-thick-green-2x",
-  "slash-thick-yellowgreen",
+  "slash-enh-red",
+  "slash-enh-yellow",
+  "slash-enh-green",
+  "slash-enh-green-red",
+  "slash-enh-green-yellow",
+  "slash-overload-25x",
 ];
 
-async function enemyPanelSlashAnim(variantClass = "slash-hit") {
+// 建議 ③（移除十字星，僅保留飛散粒子）：於強化普攻終點（右下角）或直接攻擊技能交叉中心爆開同屬性飛散粒子
+function spawnSlashImpactSparks(cls) {
+  const $ep = document.getElementById("enemy-panel");
+  if (!$ep || !cls || cls === "slash-hit") return;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  let isCross = (cls === "slash-x-red");
+  let colors = ["#ff4d4d"];
+  if (cls === "slash-enh-yellow") {
+    colors = ["#ffd23f"];
+  } else if (cls === "slash-enh-green") {
+    colors = ["#38d399"];
+  } else if (cls === "slash-enh-green-red") {
+    colors = ["#38d399", "#ff4d4d"];
+  } else if (cls === "slash-enh-green-yellow") {
+    colors = ["#38d399", "#ffd23f"];
+  }
+
+  const wrap = document.createElement("div");
+  wrap.className = "slash-impact-sparks-wrap";
+  const vectors = isCross
+    ? [
+        [-42, -28], [42, -28], [-44, 28], [44, 28],
+        [0, -36], [0, 36], [-56, 0], [56, 0], [-26, -34], [26, 34],
+      ]
+    : [
+        [-38, -26], [-18, -36], [-48, -8], [-28, 16],
+        [14, -24], [-10, 24], [-34, -14], [18, 14],
+      ];
+  const sx = isCross ? "50%" : "90%";
+  const sy = isCross ? "50%" : "82%";
+
+  wrap.innerHTML = vectors.map(([dx, dy], idx) => {
+    const c = colors[idx % colors.length];
+    return `<div class="slash-impact-spark" style="--sx:${sx};--sy:${sy};--dx:${dx}px;--dy:${dy}px;--spark-color:${c};"></div>`;
+  }).join("");
+  $ep.appendChild(wrap);
+  setTimeout(() => { wrap.remove(); }, 820);
+}
+
+async function enemyPanelSlashAnim(variantClass = "slash-hit", extraClasses = []) {
   const $ep = document.getElementById("enemy-panel");
   if (!$ep) return;
+  const w = $ep.clientWidth || 600;
+  const h = $ep.clientHeight || 96;
+  const diagAngle = (Math.atan2(h, w) * 180 / Math.PI).toFixed(2);
+  const diagLen = Math.ceil(Math.hypot(w, h) * 1.06);
+  $ep.style.setProperty("--ep-diag-angle", `${diagAngle}deg`);
+  $ep.style.setProperty("--ep-diag-len", `${diagLen}px`);
+
   $ep.classList.remove(...ALL_SLASH_CLASSES);
   void $ep.offsetWidth;
   const cls = variantClass || "slash-hit";
-  $ep.classList.add(cls);
+  $ep.classList.add(cls, ...extraClasses);
+  if (cls !== "slash-hit") {
+    setTimeout(() => { spawnSlashImpactSparks(cls); }, 280);
+  }
   const dur = (cls === "slash-hit") ? SWORD_MS : (SWORD_MS * 2);
   await sleep(dur);
   $ep.classList.remove(...ALL_SLASH_CLASSES);
@@ -1588,9 +1775,8 @@ function newGame(selectedMode) {
     skillCooldowns: {},
     justReadySkills: {},
     battleStatBonus: 0,
-    pendingChargeSkill: null,
-    activeChargeBuff: null,
-    chargeBuffVisible: false,
+    chargeBuffs: [],
+    pendingDesperateBreak: false,
     turnBuff: {},
     usedSkillThisTurn: null,
   };
@@ -1936,7 +2122,7 @@ function canCastSkill(sk) {
   return { ok: true, reason: "" };
 }
 
-// 回合開始：結算上一回合蓄力覺醒狀態，並進入第一階段（技能選擇）或第二階段（攻擊選擇）
+// 回合開始：結算上一回合【絕境突破】覺醒狀態，並保留所有尚未消耗的蓄力普攻 Buff（hero.chargeBuffs）
 async function beginHeroTurn() {
   if (!enemy || !hero || hero.hp <= 0) return;
   hero.turnBuff = {};
@@ -1944,70 +2130,69 @@ async function beginHeroTurn() {
   if ($dialogueStage) {
     $dialogueStage.classList.remove("crystal-wall-active", "charge-dmg-reduce-active");
   }
+  if ($status) {
+    $status.classList.remove("status-dmg-reduce-active", "status-dmg-reduce-hit");
+  }
 
-  // 若上一回合施放了【蓄力類】技能，於本回合開始時顯露效果！
-  if (hero.pendingChargeSkill) {
-    const pendingId = hero.pendingChargeSkill;
-    hero.pendingChargeSkill = null;
-
-    if (pendingId === "desperate_break") {
-      // 【絕境突破】下回合開始覺醒：綠光飛入四格屬性（各閃綠光浮現 +5）與另一個技能按鈕（閃光重置 CD），且 Buff 標籤改為常駐顯示「［✨突破：全屬性+5］」
-      let refreshedSkillId = null;
-      let refreshedName = "";
-      (hero.skills || []).forEach(sk => {
-        if (sk.id !== "desperate_break") {
-          hero.skillCooldowns[sk.id] = 0;
-          hero.justReadySkills[sk.id] = true;
-          refreshedSkillId = sk.id;
-          refreshedName = sk.name;
-        }
-      });
-
-      const $fromTag = document.getElementById("hero-panel-tag") || $status;
-      const statIds = ["hero-stat-physAtk", "hero-stat-physDef", "hero-stat-magAtk", "hero-stat-magDef"];
-      const flyPromises = statIds.map(id => {
-        const $cell = document.getElementById(id);
-        return $cell ? playParticlesBetween($fromTag, $cell, "#38d399", 1, 760) : Promise.resolve();
-      });
-      await Promise.all(flyPromises);
-
-      hero.battleStatBonus = (hero.battleStatBonus || 0) + 5;
-      hero.chargeBuffVisible = false;
-      renderStatus();
-
-      statIds.forEach(id => {
-        const $cell = document.getElementById(id);
-        if ($cell) {
-          replayClass($cell, "stat-flash-green");
-          spawnFloatingPlus($cell, "+5", false);
-        }
-      });
-
-      const refreshMsg = refreshedName ? `，且【${refreshedName}】冷卻時間已完全重置` : "";
-      log(`【絕境突破・覺醒】潛能徹底爆發！勇者物攻、物防、魔攻、魔防永久 +5（持續至本場戰鬥結束）${refreshMsg}！`, "hit");
-
-      showCombatButtons();
-      if (refreshedSkillId && $choices) {
-        const $refBtn = $choices.querySelector(`button[data-skill-id="${refreshedSkillId}"]`);
-        if ($refBtn) {
-          playParticlesBetween($fromTag, $refBtn, "#38d399", 2, 720).then(() => {
-            replayClass($refBtn, "skill-cd-ready");
-          });
-        }
+  // 若上一回合施放了【絕境突破】，於本回合開始時覺醒（不影響已存在的 hero.chargeBuffs）
+  if (hero.pendingDesperateBreak) {
+    hero.pendingDesperateBreak = false;
+    let refreshedSkillId = null;
+    let refreshedName = "";
+    (hero.skills || []).forEach(sk => {
+      if (sk.id !== "desperate_break") {
+        hero.skillCooldowns[sk.id] = 0;
+        hero.justReadySkills[sk.id] = true;
+        refreshedSkillId = sk.id;
+        refreshedName = sk.name;
       }
-      return;
-    } else {
-      hero.activeChargeBuff = pendingId;
-      hero.chargeBuffVisible = true;
-      if (pendingId === "full_focus") {
-        log("【全神蓄勢・爆發就緒】蓄力完成！下次發動的物理或魔法普通攻擊將造成 2.25 倍最終總傷害！", "hit");
-      } else if (pendingId === "condense_qi") {
-        log("【凝神聚氣・爆發就緒】鎖定敵方命門！下次普通攻擊基礎攻擊力 +25%，且必定觸發極限點數與穿盾破甲！", "hit");
-      } else if (pendingId === "limit_overload") {
-        log("【極限過載・爆發就緒】能量全面過載！下次普通攻擊未計算前基礎攻擊力直接翻倍（×2.0），且無視敵方 50% 護盾！", "hit");
-      } else if (pendingId === "bulwark_convert") {
-        log(`【壁壘轉化・爆發就緒】壁壘能量匯聚於兵刃！下次普通攻擊將全額附加當前剩餘護盾值（基礎攻擊力 +${hero.shield}）！`, "hit");
+    });
+
+    const $fromTag = document.getElementById("hero-panel-tag") || $status;
+    const statIds = ["hero-stat-physAtk", "hero-stat-physDef", "hero-stat-magAtk", "hero-stat-magDef"];
+    const flyPromises = statIds.map(id => {
+      const $cell = document.getElementById(id);
+      return $cell ? playParticlesBetween($fromTag, $cell, "#38d399", 1, 760) : Promise.resolve();
+    });
+    await Promise.all(flyPromises);
+
+    hero.battleStatBonus = (hero.battleStatBonus || 0) + 5;
+    renderStatus();
+
+    statIds.forEach(id => {
+      const $cell = document.getElementById(id);
+      if ($cell) {
+        replayClass($cell, "stat-flash-green");
+        spawnFloatingPlus($cell, "+5", false);
       }
+    });
+
+    const refreshMsg = refreshedName ? `，且【${refreshedName}】冷卻時間已完全重置` : "";
+    log(`【絕境突破・覺醒】潛能徹底爆發！勇者物攻、物防、魔攻、魔防永久 +5（持續至本場戰鬥結束）${refreshMsg}！`, "hit");
+
+    showCombatButtons();
+    if (refreshedSkillId && $choices) {
+      const $refBtn = $choices.querySelector(`button[data-skill-id="${refreshedSkillId}"]`);
+      if ($refBtn) {
+        playParticlesBetween($fromTag, $refBtn, "#38d399", 2, 720).then(() => {
+          replayClass($refBtn, "skill-cd-ready");
+        });
+      }
+    }
+    return;
+  }
+
+  // 若身上帶有已蓄力的普攻強化 Buff（可為 1 個或多個疊加），提示將於下次普通攻擊觸發
+  if (Array.isArray(hero.chargeBuffs) && hero.chargeBuffs.length > 0) {
+    const names = hero.chargeBuffs.map(cid => {
+      if (cid === "full_focus") return "【全神蓄勢：總傷×2.25】";
+      if (cid === "condense_qi") return "【凝神聚氣：基礎攻+25%＋極限穿甲】";
+      if (cid === "limit_overload") return "【極限過載：基礎攻×2.0＋穿盾50%】";
+      if (cid === "bulwark_convert") return `【壁壘轉化：基礎攻+${Math.max(0, hero.shield)}】`;
+      return "";
+    }).filter(Boolean);
+    if (names.length > 0) {
+      log(`【蓄力強化就緒】下次普通攻擊將附加：${names.join(" ＋ ")}！`, "hit");
     }
   }
 
@@ -2049,20 +2234,48 @@ function showCombatButtons() {
   setChoices(stage1Choices);
 }
 
-// 第二階段：顯示【物理攻擊】與【魔法攻擊】按鈕（僅顯示技能與武器名稱，保持極簡）
+// 第二階段：顯示【物理攻擊】與【魔法攻擊】按鈕（建議 ②：若本次普攻帶有技能強化，按鈕外框即時預覽對應紅／黃／綠／雙色發光邊框）
 function showAttackButtons() {
   if (!enemy || !hero || hero.hp <= 0) return;
   const wPhys = hero.equip.physWeapon ? hero.equip.physWeapon.name : "徒手";
   const wMag = hero.equip.magWeapon ? hero.equip.magWeapon.name : "基礎魔力";
   const hasSwordMult = (hero.equip.accessory && hero.equip.accessory.isHeroSword && hero.equip.accessory.atkMult > 1);
   const swordTag = hasSwordMult ? `［勇者之劍×${hero.equip.accessory.atkMult}］` : "";
+
+  const hasChargeEnh = Array.isArray(hero.chargeBuffs) && hero.chargeBuffs.length > 0;
+  const hasAtkEnh = !!(hero.turnBuff && (hero.turnBuff.applyBurn || hero.turnBuff.defIgnoreRatio > 0 || hero.turnBuff.leechHpRatio > 0));
+  const hasDefEnh = !!(hero.turnBuff && hero.turnBuff.leechShieldRatio > 0);
+
+  let previewClass = "";
+  let previewRipple = "";
+  if (hasChargeEnh && hasAtkEnh) {
+    previewClass = "atk-preview-green-red";
+    previewRipple = "#ff4d4d";
+  } else if (hasChargeEnh && hasDefEnh) {
+    previewClass = "atk-preview-green-yellow";
+    previewRipple = "#ffd23f";
+  } else if (hasAtkEnh) {
+    previewClass = "atk-preview-red";
+    previewRipple = "#ff4d4d";
+  } else if (hasDefEnh) {
+    previewClass = "atk-preview-yellow";
+    previewRipple = "#ffd23f";
+  } else if (hasChargeEnh) {
+    previewClass = "atk-preview-green";
+    previewRipple = "#38d399";
+  }
+
   const attackChoices = [
     {
       label: `【物理攻擊】使用${wPhys}${swordTag}`,
+      btnClass: previewClass,
+      rippleColor: previewRipple,
       action: () => heroAttack("phys"),
     },
     {
       label: `【魔法攻擊】使用${wMag}${swordTag}`,
+      btnClass: previewClass,
+      rippleColor: previewRipple,
       action: () => heroAttack("mag"),
     },
   ];
@@ -2089,36 +2302,63 @@ async function useCombatSkill(sk) {
   const highAtk = Math.max(s.physAtk, s.magAtk);
   const highDef = Math.max(s.physDef, s.magDef);
 
-  // ── A. 不跳過攻擊之技能（施放時播放專屬前導特效，隨後進入第二階段選擇物理／魔法攻擊） ──
+  // ── A. 不跳過攻擊之技能（施放時播放前導特效，若非立即生效則同步飛出光點生成頂部 Buff 標籤） ──
   if (!sk.skipAttack) {
     if (sk.id === "ink_flame") {
-      hero.turnBuff.applyBurn = true;
       log("勇者施放【墨焰燃蝕】！字元烈焰纏繞武器，本回合攻擊命中後將使敵方陷入 3 回合【燃燒】（每回合結束自動扣除目標當前剩餘生命的 1/5）！", "hit");
-      await playDialogueMicroGlow("glow-orange-micro", 680);
+      await Promise.all([
+        playDialogueMicroGlow("glow-orange-micro", 680),
+        playSkillActivateToBuffAnim($dialogueStage, "#ff4d4d", () => {
+          hero.turnBuff.applyBurn = true;
+          renderStatus();
+        }),
+      ]);
     } else if (sk.id === "flaw_insight") {
-      hero.turnBuff.defIgnoreRatio = 0.40;
       log("勇者施放【破綻洞悉】！看穿敵方文字防禦裂隙，本回合發動的物理或魔法攻擊將無視目標 40% 對應防禦力！", "hit");
-      await playEnemyCrosshairFx("#ff4d4d", 1000);
+      await Promise.all([
+        playEnemyCrosshairFx("#ff4d4d", 1000),
+        playSkillActivateToBuffAnim($enemyPanel, "#ff4d4d", () => {
+          hero.turnBuff.defIgnoreRatio = 0.40;
+          renderStatus();
+        }),
+      ]);
     } else if (sk.id === "word_leech") {
-      hero.turnBuff.leechHpRatio = 0.35;
       log("勇者施放【文字汲取】！本回合攻擊命中後，目標實際減少生命值的 35% 將轉化為勇者自身生命回復！", "hit");
-      await playDialogueMicroGlow("glow-green-micro", 680);
+      await Promise.all([
+        playDialogueMicroGlow("glow-green-micro", 680),
+        playSkillActivateToBuffAnim($dialogueStage, "#ff4d4d", () => {
+          hero.turnBuff.leechHpRatio = 0.35;
+          renderStatus();
+        }),
+      ]);
     } else if (sk.id === "shield_reflect") {
-      hero.turnBuff.reflectActive = true;
       log("勇者施放【護盾反震】！啟動防禦共鳴力場，本回合受擊時將以（護盾受傷 × 1 + 生命受傷 × 0.8）發動反擊！", "hit");
-      await playDialogueMicroGlow("glow-yellow-micro", 680);
+      await Promise.all([
+        playDialogueMicroGlow("glow-yellow-micro", 680),
+        playSkillActivateToBuffAnim($dialogueStage, "#ffd23f", () => {
+          hero.turnBuff.reflectActive = true;
+          renderStatus();
+        }),
+      ]);
     } else if (sk.id === "crystal_wall") {
-      hero.turnBuff.crystalWall = true;
       if ($dialogueStage) $dialogueStage.classList.add("crystal-wall-active");
       addHeroSkillShield(5, true);
       log(`勇者施放【晶化壁壘】！立即補充 5 點黃色護盾（目前護盾 ${hero.shield}）；本回合護盾受到的所有傷害降低 50%，且若護盾被擊碎，溢出傷害完全無效化！`, "hit");
-      await sleep(360);
+      await playSkillActivateToBuffAnim($dialogueStage, "#ffd23f", () => {
+        hero.turnBuff.crystalWall = true;
+        renderStatus();
+      });
     } else if (sk.id === "word_shield_leech") {
-      hero.turnBuff.leechShieldRatio = 0.35;
       log("勇者施放【文字汲盾】！本回合攻擊命中後，目標實際減少生命值的 35% 將轉化為勇者自身黃色護盾值！", "hit");
-      await playDialogueMicroGlow("glow-yellow-micro", 680);
+      await Promise.all([
+        playDialogueMicroGlow("glow-yellow-micro", 680),
+        playSkillActivateToBuffAnim($dialogueStage, "#ffd23f", () => {
+          hero.turnBuff.leechShieldRatio = 0.35;
+          renderStatus();
+        }),
+      ]);
     } else if (sk.id === "barrier_revive") {
-      // 【屏障復甦】兩段式分開結算：1. 掃過綠色波紋 ➔ 結算回血 +X；2. 掃過黃色六角網格 ➔ 結算黃盾 +8
+      // 【屏障復甦】兩段式立即生效結算：1. 掃過綠色波紋 ➔ 結算回血 +X；2. 掃過黃色六角網格 ➔ 結算黃盾 +8
       const healAmt = Math.max(3, Math.floor(hero.maxHp * 0.15));
       const beforeHp = hero.hp;
       await playDialogueSweep("sweep-green-wave", 880);
@@ -2137,7 +2377,7 @@ async function useCombatSkill(sk) {
     return;
   }
 
-  // ── B. 跳過攻擊之技能（直接結算效果，跳過本回合擲骰／抽牌與普攻階段） ──
+  // ── B. 跳過攻擊之技能（直接結算效果，跳過本回合擲骰／抽牌與普攻階段；蓄力 Buff 附加於下次普攻並支援多層疊加） ──
   if (sk.id === "shield_slash") {
     // 【破盾斬】：敵人面板畫出 X 形交叉紅色刀光，不震動螢幕
     const baseDmg = Math.floor(highAtk * 1.4);
@@ -2165,7 +2405,7 @@ async function useCombatSkill(sk) {
     const mainLine = `勇者施放【破盾斬】［必中｜雙倍破盾］ ➔ 造成 ${shdBroken + hpDmg} 點破障重擊！（${parts.join("，") || "0 傷害"}）`;
     const formulaLine = `基礎值 ${baseDmg}（較高攻 ${highAtk} × 1.4）➔ 破盾消耗 ${baseUsed}（雙倍擊碎 ${shdBroken} 盾），剩餘 ${hpDmg} 直扣生命`;
     logCombatReport(true, mainLine, formulaLine);
-    if (hero.activeChargeBuff) {
+    if (hero.chargeBuffs && hero.chargeBuffs.length > 0) {
       log("（※蓄力強化狀態依然保留，將於下次普攻觸發）", "charge-keep-hint");
     }
     const hitP = enemyHitAnim(enemyLostHp, enemyShieldState);
@@ -2176,7 +2416,7 @@ async function useCombatSkill(sk) {
   }
 
   if (sk.id === "desperate_strike") {
-    // 【捨身決絕】：勇者對話框先閃暗紅光 ➔ 敵人面板從左下到右上畫出加粗深紅色刀光，不震動螢幕
+    // 【捨身決絕】（直接攻擊技能統一規範）：勇者對話框先閃暗紅光 ➔ 敵人面板畫出 2 倍粗白芯紅邊 X 形交叉刀光，不震動螢幕
     const calcCost = Math.max(1, Math.floor(hero.hp * 0.20));
     const actualCost = Math.min(Math.max(0, hero.hp - 1), calcCost);
     hero.hp = Math.max(1, hero.hp - actualCost);
@@ -2184,14 +2424,14 @@ async function useCombatSkill(sk) {
     await playDialogueMicroGlow("glow-dark-red", 720);
 
     const trueDmg = Math.floor(calcCost * 2.5 + highAtk * 0.6);
-    const slashP = enemyPanelSlashAnim("slash-bl-tr-crimson");
+    const slashP = enemyPanelSlashAnim("slash-x-red");
     await sleep(300);
     enemy.hp -= trueDmg;
     renderStatus();
     const mainLine = `勇者施放【捨身決絕】［消耗 ${actualCost} 點生命｜真實傷害］ ➔ 造成 ${trueDmg} 點真實傷害！（生命 −${trueDmg}）`;
     const formulaLine = `消耗生命 ${calcCost} × 2.5 + 較高攻 ${highAtk} × 60% = ${trueDmg} 無視防盾真實傷害`;
     logCombatReport(true, mainLine, formulaLine);
-    if (hero.activeChargeBuff) {
+    if (hero.chargeBuffs && hero.chargeBuffs.length > 0) {
       log("（※蓄力強化狀態依然保留，將於下次普攻觸發）", "charge-keep-hint");
     }
     const hitP = enemyHitAnim(true, "none");
@@ -2211,7 +2451,7 @@ async function useCombatSkill(sk) {
       `勇者施放【護盾重構】［跳過攻擊］ ➔ 立即生成 ${shdGain} 點黃色護盾！（目前護盾 ${hero.shield}）`,
       `基礎 6 + 較高防 ${highDef} × 35% = +${shdGain} 護盾`
     );
-    if (hero.activeChargeBuff) {
+    if (hero.chargeBuffs && hero.chargeBuffs.length > 0) {
       log("（※蓄力強化狀態依然保留，將於下次普攻觸發）", "charge-keep-hint");
     }
     await sleep(360);
@@ -2220,18 +2460,18 @@ async function useCombatSkill(sk) {
   }
 
   if (sk.id === "full_focus") {
-    // 【全神蓄勢】：當回合綠光圈向中心聚成綠點飛去變 Buff（維持淡綠減傷框）
-    hero.turnBuff.dmgReduceRatio = 0.30;
-    hero.pendingChargeSkill = "full_focus";
+    // 【全神蓄勢】：本回合勇者數值面板（#status）被半透明綠色六角形防護網格覆蓋（減傷 30%），綠光圈聚成綠點飛去變雙 Buff（本回減傷30% ＋ 下次普攻×2.25）
     if ($dialogueStage) $dialogueStage.classList.add("charge-dmg-reduce-active");
+    if ($status) $status.classList.add("status-dmg-reduce-active");
     await playChargeCondenseToBuffAnim(() => {
-      hero.chargeBuffVisible = true;
+      hero.turnBuff.dmgReduceRatio = 0.30;
+      hero.chargeBuffs.push("full_focus");
       renderStatus();
     });
     logCombatReport(
       true,
-      "勇者施放【全神蓄勢】［跳過攻擊｜蓄力階段］ ➔ 本回合受傷降低 30%，下次普通攻擊造成 2.25 倍最終傷害！",
-      "當回合減傷 30% ➔ 下次普攻最終傷害 × 2.25"
+      "勇者施放【全神蓄勢】［跳過攻擊｜蓄力階段］ ➔ 勇者面板展開綠色六角防護網格（本回合受傷降低 30%），下次普通攻擊造成 2.25 倍最終傷害！",
+      "當回合減傷 30% ➔ 下次普攻最終傷害 × 2.25（可與其他蓄力技能疊加）"
     );
     await sleep(320);
     await finishHeroTurnAndEnemyAct(false);
@@ -2240,17 +2480,16 @@ async function useCombatSkill(sk) {
 
   if (sk.id === "condense_qi") {
     // 【凝神聚氣】：當回合綠光圈向中心聚成綠點飛去變 Buff，與 Buff 同時在敵人面板閃一下綠色十字準星
-    hero.pendingChargeSkill = "condense_qi";
     let crosshairP = Promise.resolve();
     await playChargeCondenseToBuffAnim(() => {
-      hero.chargeBuffVisible = true;
+      hero.chargeBuffs.push("condense_qi");
       renderStatus();
       crosshairP = playEnemyCrosshairFx("#38d399", 1040);
     });
     logCombatReport(
       true,
       "勇者施放【凝神聚氣】［跳過攻擊｜蓄力階段］ ➔ 鎖定敵方命門，下次普通攻擊基礎攻擊 +25% 且必出極限穿盾破甲！",
-      "下次普攻基礎攻擊 × 1.25 ＋ 必出骰子20／撲克同花色K+A穿甲"
+      "下次普攻基礎攻擊 × 1.25 ＋ 必出骰子20／撲克同花色K+A穿甲（可與其他蓄力技能疊加）"
     );
     await crosshairP;
     await sleep(200);
@@ -2264,15 +2503,14 @@ async function useCombatSkill(sk) {
     addHeroSkillShield(6, true);
     await sleep(400);
 
-    hero.pendingChargeSkill = "limit_overload";
     await playChargeCondenseToBuffAnim(() => {
-      hero.chargeBuffVisible = true;
+      hero.chargeBuffs.push("limit_overload");
       renderStatus();
     });
     logCombatReport(
       true,
       `勇者施放【極限過載】［跳過攻擊｜蓄力階段］ ➔ 立即獲得 6 點黃色護盾（目前護盾 ${hero.shield}），下次普通攻擊基礎攻擊翻倍（×2.0）且無視 50% 護盾！`,
-      "當回合護盾 +6 ➔ 下次普攻基礎攻擊 × 2.0 ＋ 無視敵方 50% 護盾"
+      "當回合護盾 +6 ➔ 下次普攻基礎攻擊 × 2.0 ＋ 無視敵方 50% 護盾（可與其他蓄力技能疊加）"
     );
     await sleep(300);
     await finishHeroTurnAndEnemyAct(false);
@@ -2289,15 +2527,14 @@ async function useCombatSkill(sk) {
     addHeroSkillShield(addedShd, true);
     await sleep(400);
 
-    hero.pendingChargeSkill = "bulwark_convert";
     await playChargeCondenseToBuffAnim(() => {
-      hero.chargeBuffVisible = true;
+      hero.chargeBuffs.push("bulwark_convert");
       renderStatus();
     });
     logCombatReport(
       true,
       `勇者施放【壁壘轉化】［跳過攻擊｜蓄力階段］ ➔ 護盾補充並翻倍至 ${hero.shield} 點（+${addedShd}），下次普通攻擊將剩餘護盾 100% 附加至攻擊力！`,
-      `（原護盾 ${beforeShd} + 6）× 2 = ${hero.shield} 護盾 ➔ 下次普攻剩餘護盾 100% 轉加基礎攻擊`
+      `（原護盾 ${beforeShd} + 6）× 2 = ${hero.shield} 護盾 ➔ 下次普攻剩餘護盾 100% 轉加基礎攻擊（可與其他蓄力技能疊加）`
     );
     await sleep(300);
     await finishHeroTurnAndEnemyAct(false);
@@ -2305,7 +2542,7 @@ async function useCombatSkill(sk) {
   }
 
   if (sk.id === "desperate_break") {
-    // 【絕境突破】（選項 B）：1. 先掃過綠色波紋回血「+X」 ➔ 2. 再聚成綠點飛去變待發 Buff
+    // 【絕境突破】（選項 B）：1. 先掃過綠色波紋回血「+X」 ➔ 2. 再聚成綠點飛去變待發 Buff（不覆蓋已有的蓄力普攻 Buff）
     const healAmt = Math.max(4, Math.floor(hero.maxHp * 0.20));
     const beforeHp = hero.hp;
     await playDialogueSweep("sweep-green-wave", 880);
@@ -2314,9 +2551,8 @@ async function useCombatSkill(sk) {
     triggerHeroHealVisual(actualHeal);
     await sleep(400);
 
-    hero.pendingChargeSkill = "desperate_break";
     await playChargeCondenseToBuffAnim(() => {
-      hero.chargeBuffVisible = true;
+      hero.pendingDesperateBreak = true;
       renderStatus();
     });
     logCombatReport(
@@ -2396,14 +2632,17 @@ async function startBattle(template) {
 
   // 每場戰鬥開始時：刷新護盾（全部為藍色初始裝備護盾，技能黃色護盾歸 0）、重置所有已裝備技能冷卻為 0、重置戰鬥內臨時狀態
   hero.battleStatBonus = 0;
-  hero.pendingChargeSkill = null;
-  hero.activeChargeBuff = null;
-  hero.chargeBuffVisible = false;
+  hero.chargeBuffs = [];
+  hero.pendingDesperateBreak = false;
   hero.turnBuff = {};
   hero.usedSkillThisTurn = null;
   hero.justReadySkills = {};
+  lastRenderedBuffKeys = new Set();
   if ($dialogueStage) {
     $dialogueStage.classList.remove("crystal-wall-active", "charge-dmg-reduce-active");
+  }
+  if ($status) {
+    $status.classList.remove("status-dmg-reduce-active", "status-dmg-reduce-hit");
   }
   if (hero.skills) {
     hero.skills.forEach(sk => { hero.skillCooldowns[sk.id] = 0; });
@@ -2647,41 +2886,61 @@ async function heroAttack(atkType) {
   let atkVal = isMag ? s.magAtk : s.physAtk;
   const defVal = isMag ? enemy.curMagDef : enemy.curPhysDef;
 
-  // 結算本回合攜帶的蓄力爆發與當回合技能增益
-  const activeCharge = hero.activeChargeBuff;
+  // 結算本次普通攻擊攜帶的所有蓄力 Buff（支援多層疊加，採選項 B：先乘後加）與當回合技能增益
+  const activeCharges = Array.isArray(hero.chargeBuffs) ? [...hero.chargeBuffs] : [];
+  const hasFullFocus = activeCharges.includes("full_focus");
+  const hasCondenseQi = activeCharges.includes("condense_qi");
+  const hasLimitOverload = activeCharges.includes("limit_overload");
+  const hasBulwarkConvert = activeCharges.includes("bulwark_convert");
+
   const extraTags = [];
   let finalDmgMult = 1;
   let ignoreHalfShield = false;
   let forceMaxRoll = false;
   const $atkStatCell = document.getElementById(isMag ? "hero-stat-magAtk" : "hero-stat-physAtk");
 
-  if (activeCharge === "bulwark_convert") {
-    // 【壁壘轉化】下次普攻：從頂部護盾條飛出一顆黃色光點進入物攻／魔攻數字並閃光
-    const shdBonus = Math.max(0, hero.shield);
-    atkVal += shdBonus;
-    extraTags.push(`壁壘轉化：攻擊+${shdBonus}`);
+  // 1. 先計算基礎攻擊力乘法加成（凝神聚氣 ×1.25、極限過載 ×2.0）
+  activeCharges.forEach(cid => {
+    if (cid === "condense_qi") {
+      atkVal = Math.floor(atkVal * 1.25);
+      forceMaxRoll = true;
+      extraTags.push("凝神聚氣：攻擊+25%＋極限穿甲");
+    } else if (cid === "limit_overload") {
+      atkVal = Math.floor(atkVal * 2.0);
+      ignoreHalfShield = true;
+      extraTags.push("極限過載：基礎攻×2＋無視50%護盾");
+    }
+  });
+
+  if (hasLimitOverload && $atkStatCell) {
+    replayClass($atkStatCell, "stat-flash-green");
+    await sleep(440);
+  }
+
+  // 2. 再計算基礎攻擊力加法附加（壁壘轉化：將當前剩餘護盾附加至攻擊力）
+  activeCharges.forEach(cid => {
+    if (cid === "bulwark_convert") {
+      const shdBonus = Math.max(0, hero.shield);
+      atkVal += shdBonus;
+      extraTags.push(`壁壘轉化：攻擊+${shdBonus}`);
+    }
+  });
+
+  if (hasBulwarkConvert) {
     const $shTrack = document.getElementById("hero-sh-track");
     if ($shTrack && $atkStatCell) {
       await playParticlesBetween($shTrack, $atkStatCell, "#ffd23f", 1, 680);
       replayClass($atkStatCell, "stat-flash-green");
     }
-  } else if (activeCharge === "condense_qi") {
-    atkVal = Math.floor(atkVal * 1.25);
-    forceMaxRoll = true;
-    extraTags.push("凝神聚氣：攻擊+25%＋極限穿甲");
-  } else if (activeCharge === "limit_overload") {
-    // 【極限過載】下次普攻：頂部物攻／魔攻數字閃一下綠光
-    atkVal = Math.floor(atkVal * 2.0);
-    ignoreHalfShield = true;
-    extraTags.push("極限過載：基礎攻×2＋無視50%護盾");
-    if ($atkStatCell) {
-      replayClass($atkStatCell, "stat-flash-green");
-      await sleep(440);
-    }
-  } else if (activeCharge === "full_focus") {
-    finalDmgMult = 2.25;
-    extraTags.push("全神蓄勢：總傷×2.25");
   }
+
+  // 3. 計算最終總傷害倍率（全神蓄勢 ×2.25）
+  activeCharges.forEach(cid => {
+    if (cid === "full_focus") {
+      finalDmgMult = Math.round(finalDmgMult * 2.25 * 10000) / 10000;
+      extraTags.push("全神蓄勢：總傷×2.25");
+    }
+  });
 
   const defIgnoreRatio = (hero.turnBuff && hero.turnBuff.defIgnoreRatio) ? hero.turnBuff.defIgnoreRatio : 0;
   if (defIgnoreRatio > 0) {
@@ -2697,6 +2956,7 @@ async function heroAttack(atkType) {
   let dice, drawnCard = null;
   let pokerSpecialPrompt = "";
 
+  // 註：僅【凝神聚氣】（forceMaxRoll = true）時骰子或撲克外框閃綠光，【全神蓄勢】不閃外框綠光
   if (gameMode === "poker") {
     if (forceMaxRoll) {
       const forcedSuit = isMag ? POKER_SUITS[1] : POKER_SUITS[0]; // ♥紅心 or ♠黑桃
@@ -2722,8 +2982,8 @@ async function heroAttack(atkType) {
     await rollDiceAnim("勇者", HERO_COLOR, dice, labelNote, forceMaxRoll);
   }
 
-  const enemyShieldBefore = enemy.shield;
-  const enemyHpBefore = enemy.hp;
+  const enemyShieldBefore = Math.max(0, enemy.shield);
+  const enemyHpBefore = Math.max(0, enemy.hp);
   const heroTarget = { shield: enemy.shield, hp: enemy.hp };
   const report = dealDamage("勇者", atkType, atkVal, defVal, heroTarget, dice, drawnCard, {
     defIgnoreRatio,
@@ -2731,7 +2991,9 @@ async function heroAttack(atkType) {
     ignoreHalfShield,
     extraTags,
   });
-  const enemyLostHp = heroTarget.hp < enemyHpBefore;
+  // 嚴格計算敵人「實際減少的生命值（不含溢出傷害 Overkill）」，供【文字汲取】與【文字汲盾】使用
+  const actualEnemyHpLost = Math.max(0, enemyHpBefore - Math.max(0, heroTarget.hp));
+  const enemyLostHp = actualEnemyHpLost > 0;
   let enemyShieldState = "none";
   if (enemyShieldBefore > 0 && heroTarget.shield === 0 && report.toShield > 0) {
     enemyShieldState = "shatter";
@@ -2739,30 +3001,59 @@ async function heroAttack(atkType) {
     enemyShieldState = "block";
   }
 
-  // 決定本次普攻刀光樣式（壁壘轉化黃綠邊／其他蓄力2倍綠邊／墨焰燃蝕橘紅刀光／破綻洞悉紅邊白刀光／預設白刀光）
+  // 決定本次普攻刀光樣式（第十四版統一規範：普通攻擊為左下➔右上 1倍白光；所有強化普攻一律為左上➔右下 2倍粗白芯紅/黃/綠光，跨類別疊加為雙色融合，雙蓄力疊加升級為 2.5倍粗）
+  const hasChargeEnh = activeCharges.length > 0;
+  const hasAtkEnh = !!(hero.turnBuff && (hero.turnBuff.applyBurn || defIgnoreRatio > 0 || hero.turnBuff.leechHpRatio > 0));
+  const hasDefEnh = !!(hero.turnBuff && hero.turnBuff.leechShieldRatio > 0);
+
   let slashVariant = "slash-hit";
-  if (activeCharge === "bulwark_convert") {
-    slashVariant = "slash-thick-yellowgreen";
-  } else if (activeCharge === "full_focus" || activeCharge === "condense_qi" || activeCharge === "limit_overload") {
-    slashVariant = "slash-thick-green-2x";
-  } else if (hero.turnBuff && hero.turnBuff.applyBurn) {
-    slashVariant = "slash-flame-orange";
-  } else if (defIgnoreRatio > 0) {
-    slashVariant = "slash-thick-red-edge";
+  const slashExtraClasses = [];
+  if (hasChargeEnh && hasAtkEnh) {
+    slashVariant = "slash-enh-green-red";
+  } else if (hasChargeEnh && hasDefEnh) {
+    slashVariant = "slash-enh-green-yellow";
+  } else if (hasAtkEnh) {
+    slashVariant = "slash-enh-red";
+  } else if (hasDefEnh) {
+    slashVariant = "slash-enh-yellow";
+  } else if (hasChargeEnh) {
+    slashVariant = "slash-enh-green";
+  }
+  if (activeCharges.length >= 2) {
+    slashExtraClasses.push("slash-overload-25x");
   }
 
-  const slashP = enemyPanelSlashAnim(slashVariant);
+  const slashP = enemyPanelSlashAnim(slashVariant, slashExtraClasses);
   await sleep(slashVariant === "slash-hit" ? 150 : 300);
   enemy.shield = heroTarget.shield;
   enemy.hp = heroTarget.hp;
 
-  // 若本次普攻消耗了蓄力 Buff，將 Buff 標籤清除並播放化為綠色光點飛走動畫
-  let buffFlyP = Promise.resolve();
-  if (activeCharge) {
-    buffFlyP = playBuffFlyAwayAnim();
-    hero.activeChargeBuff = null;
-    hero.chargeBuffVisible = false;
+  // 命中結算時消耗的 Buff（所有蓄力普攻 Buff ＋ 破綻洞悉，以及若失手未命中時的普攻附加 Buff）化為對應顏色光點飛走
+  const attackHit = !(gameMode === "dice" && dice === 0);
+  const flySpecsOnHit = [];
+  if (activeCharges.length > 0) {
+    flySpecsOnHit.push({ keyPrefix: "charge_", color: "#38d399" });
+    hero.chargeBuffs = [];
   }
+  if (defIgnoreRatio > 0) {
+    flySpecsOnHit.push({ keyPrefix: "turn_flaw_insight", color: "#ff4d4d" });
+    delete hero.turnBuff.defIgnoreRatio;
+  }
+  if (!attackHit && hero.turnBuff) {
+    if (hero.turnBuff.applyBurn) {
+      flySpecsOnHit.push({ keyPrefix: "turn_ink_flame", color: "#ff4d4d" });
+      delete hero.turnBuff.applyBurn;
+    }
+    if (hero.turnBuff.leechHpRatio) {
+      flySpecsOnHit.push({ keyPrefix: "turn_word_leech", color: "#ff4d4d" });
+      delete hero.turnBuff.leechHpRatio;
+    }
+    if (hero.turnBuff.leechShieldRatio) {
+      flySpecsOnHit.push({ keyPrefix: "turn_word_shield_leech", color: "#ffd23f" });
+      delete hero.turnBuff.leechShieldRatio;
+    }
+  }
+  const buffFlyP = flySpecsOnHit.length > 0 ? playSpecificBuffsFlyAwayAnim(flySpecsOnHit) : Promise.resolve();
   renderStatus();
 
   // 【破綻洞悉】命中時：敵人面板對應防禦數字閃紅光
@@ -2776,35 +3067,61 @@ async function heroAttack(atkType) {
   await Promise.all([slashP, hitP, buffFlyP]);
   await sleep(260);
 
-  // 結算攻擊命中後的附加技能效果（墨焰燃蝕、文字汲取、文字汲盾）
-  const attackHit = !(gameMode === "dice" && dice === 0);
+  // 結算攻擊命中後的附加技能效果（墨焰燃蝕、文字汲取、文字汲盾），並讓對應 Buff 標籤化為光點飛走
   if (attackHit && hero.turnBuff) {
-    if (hero.turnBuff.applyBurn && enemy.hp > 0) {
-      enemy.burnTurns = 3;
-      const nextTickVal = Math.max(1, Math.floor(enemy.hp / 5));
-      log(`【墨焰燃蝕】${enemy.name}被字元烈焰引燃，陷入【燃燒】狀態（每回合結束扣除 1/5 當前剩餘生命［預計扣除 ${nextTickVal} 點］，持續 3 回合）！`, "hit");
-      renderStatus();
-      await playEnemyFlameHitFx(1280);
-    }
-    if (hero.turnBuff.leechHpRatio && report.toHp > 0) {
-      const healAmt = Math.floor(report.toHp * hero.turnBuff.leechHpRatio);
-      if (healAmt > 0) {
-        const $hpTrack = document.getElementById("hero-hp-track") || $status;
-        await playParticlesBetween($enemyPanel, $hpTrack, "#38d399", 7, 840);
-        const beforeHp = hero.hp;
-        hero.hp = Math.min(hero.maxHp, hero.hp + healAmt);
-        const actualHealed = hero.hp - beforeHp;
-        log(`【文字汲取】勇者將敵方減少的 ${report.toHp} 點生命轉化為生機，回復 ${actualHealed} 點生命（目前生命 ${hero.hp} / ${hero.maxHp}）！`, "hit");
-        triggerHeroHealVisual(actualHealed);
+    if (hero.turnBuff.applyBurn) {
+      const burnFlyP = playSpecificBuffsFlyAwayAnim([{ keyPrefix: "turn_ink_flame", color: "#ff4d4d" }]);
+      delete hero.turnBuff.applyBurn;
+      if (enemy.hp > 0) {
+        enemy.burnTurns = 3;
+        const nextTickVal = Math.max(1, Math.floor(enemy.hp / 5));
+        log(`【墨焰燃蝕】${enemy.name}被字元烈焰引燃，陷入【燃燒】狀態（每回合結束扣除 1/5 當前剩餘生命［預計扣除 ${nextTickVal} 點］，持續 3 回合）！`, "hit");
+        renderStatus();
+        await Promise.all([burnFlyP, playEnemyFlameHitFx(1280)]);
+      } else {
+        renderStatus();
+        await burnFlyP;
       }
     }
-    if (hero.turnBuff.leechShieldRatio && report.toHp > 0) {
-      const shdAmt = Math.floor(report.toHp * hero.turnBuff.leechShieldRatio);
-      if (shdAmt > 0) {
-        const $shTrack = document.getElementById("hero-sh-track") || $status;
-        await playParticlesBetween($enemyPanel, $shTrack, "#ffd23f", 7, 840);
-        addHeroSkillShield(shdAmt, true);
-        log(`【文字汲盾】勇者將敵方減少的 ${report.toHp} 點生命轉化為屏障，獲得 ${shdAmt} 點黃色護盾（目前護盾 ${hero.shield}）！`, "hit");
+    if (hero.turnBuff.leechHpRatio) {
+      const leechRatio = hero.turnBuff.leechHpRatio;
+      const leechFlyP = playSpecificBuffsFlyAwayAnim([{ keyPrefix: "turn_word_leech", color: "#ff4d4d" }]);
+      delete hero.turnBuff.leechHpRatio;
+      renderStatus();
+      if (actualEnemyHpLost > 0) {
+        const healAmt = Math.floor(actualEnemyHpLost * leechRatio);
+        if (healAmt > 0) {
+          const $hpTrack = document.getElementById("hero-hp-track") || $status;
+          await Promise.all([leechFlyP, playParticlesBetween($enemyPanel, $hpTrack, "#38d399", 7, 840)]);
+          const beforeHp = hero.hp;
+          hero.hp = Math.min(hero.maxHp, hero.hp + healAmt);
+          const actualHealed = hero.hp - beforeHp;
+          log(`【文字汲取】勇者將敵方實際減少的 ${actualEnemyHpLost} 點生命轉化為生機，回復 ${actualHealed} 點生命（目前生命 ${hero.hp} / ${hero.maxHp}）！`, "hit");
+          triggerHeroHealVisual(actualHealed);
+        } else {
+          await leechFlyP;
+        }
+      } else {
+        await leechFlyP;
+      }
+    }
+    if (hero.turnBuff.leechShieldRatio) {
+      const shdRatio = hero.turnBuff.leechShieldRatio;
+      const shdFlyP = playSpecificBuffsFlyAwayAnim([{ keyPrefix: "turn_word_shield_leech", color: "#ffd23f" }]);
+      delete hero.turnBuff.leechShieldRatio;
+      renderStatus();
+      if (actualEnemyHpLost > 0) {
+        const shdAmt = Math.floor(actualEnemyHpLost * shdRatio);
+        if (shdAmt > 0) {
+          const $shTrack = document.getElementById("hero-sh-track") || $status;
+          await Promise.all([shdFlyP, playParticlesBetween($enemyPanel, $shTrack, "#ffd23f", 7, 840)]);
+          addHeroSkillShield(shdAmt, true);
+          log(`【文字汲盾】勇者將敵方實際減少的 ${actualEnemyHpLost} 點生命轉化為屏障，獲得 ${shdAmt} 點黃色護盾（目前護盾 ${hero.shield}）！`, "hit");
+        } else {
+          await shdFlyP;
+        }
+      } else {
+        await shdFlyP;
       }
     }
   }
@@ -2885,6 +3202,37 @@ async function finishHeroTurnAndEnemyAct(didAttackAction) {
   await beginHeroTurn();
 }
 
+// 回合結束清理本回合持續型 Buff（全神蓄勢 30% 免傷、護盾反震、晶化壁壘），並讓對應 Buff 標籤化為光點飛走
+async function consumeEndOfTurnHeroBuffs() {
+  if (!hero || !hero.turnBuff) return;
+  const flySpecs = [];
+  if (hero.turnBuff.dmgReduceRatio && hero.turnBuff.dmgReduceRatio > 0) {
+    flySpecs.push({ keyPrefix: "turn_dmg_reduce", color: "#38d399" });
+    delete hero.turnBuff.dmgReduceRatio;
+  }
+  if (hero.turnBuff.reflectActive) {
+    flySpecs.push({ keyPrefix: "turn_reflect", color: "#ffd23f" });
+    delete hero.turnBuff.reflectActive;
+  }
+  if (hero.turnBuff.crystalWall) {
+    flySpecs.push({ keyPrefix: "turn_crystal_wall", color: "#ffd23f" });
+    delete hero.turnBuff.crystalWall;
+  }
+  if ($dialogueStage) {
+    $dialogueStage.classList.remove("crystal-wall-active", "charge-dmg-reduce-active");
+  }
+  if ($status) {
+    $status.classList.remove("status-dmg-reduce-active", "status-dmg-reduce-hit");
+  }
+  if (flySpecs.length > 0) {
+    const flyP = playSpecificBuffsFlyAwayAnim(flySpecs);
+    renderStatus();
+    await flyP;
+  } else {
+    renderStatus();
+  }
+}
+
 async function enemyAttack() {
   // 一階段魔王掙扎判定（初期 15%，半血以下 30%）
   let berserkBonus = 0;
@@ -2899,6 +3247,7 @@ async function enemyAttack() {
         log(BOSS_STRUGGLE_SELF_HIT_TEXT, "text-curse");
         renderStatus();
         await sleep(HIT_MS);
+        await consumeEndOfTurnHeroBuffs();
         if (enemy.hp <= 0) await winBattle();
         return;
       } else {
@@ -2967,6 +3316,7 @@ async function enemyAttack() {
 
     // 觸發「受到攻擊後生命值沒有減少」的視覺特效（面板周圍閃金光）
     await heroHitAnim(false);
+    await consumeEndOfTurnHeroBuffs();
 
     // 畫面變暗並在中心顯示文字消失效果
     if (acc.blocksLeft > 0) {
@@ -3014,28 +3364,32 @@ async function enemyAttack() {
   } else if (report.toShield > 0 && !heroLostHp && hero.shield > 0) {
     heroShieldState = (yellowUsed > 0) ? "block-yellow" : "block";
   }
-  await heroHitAnim(heroLostHp, heroShieldState);
 
-  // 回合受擊結束後，平滑淡出晶化壁壘雙層亮框與全神蓄勢減傷框
-  if ($dialogueStage) {
-    $dialogueStage.classList.remove("crystal-wall-active", "charge-dmg-reduce-active");
+  // 若處於【全神蓄勢】免傷 30% 保護中，受擊瞬間勇者數值面板（#status）上的綠色六角防護網格同步閃耀
+  if (targetDmgReduceRatio > 0 && $status) {
+    $status.classList.add("status-dmg-reduce-hit");
   }
 
-  if (hero.hp <= 0) {
-    loseGame();
-    return;
-  }
+  // 檢查是否於受擊同時觸發【護盾反震】黃色圓形波紋（與對話框閃紅光／金光／藍光／黃光完全同步）
+  const canReflect = !!(
+    enemy &&
+    enemy.hp > 0 &&
+    hero.hp > 0 &&
+    hero.turnBuff &&
+    hero.turnBuff.reflectActive &&
+    (report.toShield > 0 || report.toHp > 0)
+  );
+  const reflectDmg = canReflect ? Math.floor(report.toShield * 1.0 + report.toHp * 0.8) : 0;
 
-  // 結算勇者【護盾反震】反擊傷害：從勇者對話框向外擴散黃色圓形波紋，碰到敵人面板時造成傷害並延續至螢幕邊界
-  if (enemy && enemy.hp > 0 && hero.turnBuff && hero.turnBuff.reflectActive && (report.toShield > 0 || report.toHp > 0)) {
-    const reflectDmg = Math.floor(report.toShield * 1.0 + report.toHp * 0.8);
-    if (reflectDmg > 0) {
-      const eShieldBefore = enemy.shield;
-      const eHpBefore = enemy.hp;
-      const eShdHit = Math.min(enemy.shield, reflectDmg);
-      const eHpHit = reflectDmg - eShdHit;
+  if (reflectDmg > 0) {
+    const eShieldBefore = enemy.shield;
+    const eHpBefore = enemy.hp;
+    const eShdHit = Math.min(enemy.shield, reflectDmg);
+    const eHpHit = reflectDmg - eShdHit;
 
-      await playReflectWaveAnim(async () => {
+    await Promise.all([
+      heroHitAnim(heroLostHp, heroShieldState),
+      playReflectWaveAnim(async () => {
         enemy.shield -= eShdHit;
         enemy.hp -= eHpHit;
         renderStatus();
@@ -3055,15 +3409,28 @@ async function enemyAttack() {
           eShdState = "block";
         }
         await enemyHitAnim(enemy.hp < eHpBefore, eShdState);
-      });
+      }),
+    ]);
 
-      await sleep(180);
-      if (enemy.hp <= 0) {
-        await winBattle();
-        return;
-      }
+    await consumeEndOfTurnHeroBuffs();
+
+    await sleep(180);
+    if (enemy && enemy.hp <= 0) {
+      await winBattle();
+      return;
     }
+    return;
   }
+
+  await heroHitAnim(heroLostHp, heroShieldState);
+
+  if (hero.hp <= 0) {
+    if ($status) $status.classList.remove("status-dmg-reduce-active", "status-dmg-reduce-hit");
+    loseGame();
+    return;
+  }
+
+  await consumeEndOfTurnHeroBuffs();
 }
 
 async function winBattle() {
