@@ -15,6 +15,7 @@
   <div class="menu" id="title-main-menu">
     <button id="btn-start">開始遊戲</button>
     <button id="btn-intro">遊戲介紹</button>
+    <button id="btn-compendium">技能圖鑑</button>
   </div>
   <div class="menu hidden" id="title-mode-menu">
     <div class="mode-prompt" id="mode-prompt-title">請選擇本局遊戲模式：</div>
@@ -30,6 +31,24 @@
   <div class="menu">
     <button id="btn-back">返回</button>
     <button id="btn-intro-start">開始遊戲</button>
+  </div>
+</div>
+
+<!-- 技能圖鑑畫面（第十二版 v12 新增：頂部附分類切換按鈕） -->
+<div id="compendium-screen" class="screen hidden">
+  <div class="compendium-header">
+    <h2 class="compendium-title">【局內技能圖鑑】</h2>
+    <div class="compendium-tabs" id="compendium-tabs">
+      <button type="button" class="comp-tab active" data-cat="all">全部 (15)</button>
+      <button type="button" class="comp-tab tab-attack" data-cat="attack">攻擊類 (5)</button>
+      <button type="button" class="comp-tab tab-defense" data-cat="defense">防禦類 (5)</button>
+      <button type="button" class="comp-tab tab-charge" data-cat="charge">蓄力類 (5)</button>
+    </div>
+  </div>
+  <div class="box compendium-list" id="compendium-box"></div>
+  <div class="menu">
+    <button id="btn-compendium-back">返回</button>
+    <button id="btn-compendium-start">開始遊戲</button>
   </div>
 </div>
 
@@ -93,6 +112,16 @@
 
 <!-- 第九版新增：全螢幕文字消失轉場（黃色）與傳送門掃描線動畫 -->
 <div id="text-fade-overlay" class="hidden" aria-hidden="true"><div class="fade-content"></div><div class="fade-scanline"></div></div>
+
+<!-- 第十二版新增：獲得技能殘頁化為光點飛入頂部技能按鈕動畫層 & 跨面板粒子飛行層 -->
+<div id="skill-acquire-overlay" class="hidden" aria-hidden="true">
+  <div class="skill-acquire-card" id="skill-acquire-card">
+    <div class="acq-sub">領悟戰技殘頁</div>
+    <div class="acq-name" id="skill-acquire-name"></div>
+    <div class="acq-cat" id="skill-acquire-cat"></div>
+  </div>
+</div>
+<div id="fx-flight-layer" aria-hidden="true"></div>
 
 <div id="game" class="hidden">
   <div id="status"></div>

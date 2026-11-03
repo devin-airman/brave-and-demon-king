@@ -1446,8 +1446,8 @@ body {
   border-left-color: #ff4d4d;
 }
 .skill-detail-card.cat-defense {
-  border-color: rgba(77, 166, 255, 0.55);
-  border-left-color: #4da6ff;
+  border-color: rgba(255, 210, 63, 0.55);
+  border-left-color: #ffd23f;
 }
 .skill-detail-card.cat-charge {
   border-color: rgba(56, 211, 153, 0.55);
@@ -1474,9 +1474,9 @@ body {
   background: rgba(255, 77, 77, 0.12);
 }
 .skill-cat-badge.cat-defense {
-  color: #7ec8ff;
-  border: 1px solid #4da6ff;
-  background: rgba(77, 166, 255, 0.12);
+  color: #ffe066;
+  border: 1px solid #ffd23f;
+  background: rgba(255, 210, 63, 0.12);
 }
 .skill-cat-badge.cat-charge {
   color: #6ee7b7;
@@ -1495,8 +1495,8 @@ body {
   box-shadow: 0 0 8px rgba(255, 77, 77, 0.28), inset 3px 0 0 #ff4d4d;
 }
 #choices button.skill-btn-defense {
-  border: 1.5px solid #4da6ff;
-  box-shadow: 0 0 8px rgba(77, 166, 255, 0.28), inset 3px 0 0 #4da6ff;
+  border: 1.5px solid #ffd23f;
+  box-shadow: 0 0 8px rgba(255, 210, 63, 0.28), inset 3px 0 0 #ffd23f;
 }
 #choices button.skill-btn-charge {
   border: 1.5px solid #38d399;
@@ -1513,10 +1513,10 @@ body {
   }
   #choices button.skill-btn-defense:not(:disabled):hover,
   #choices button.skill-btn-defense:not(:disabled):focus-visible {
-    background: #08192b;
+    background: #261f06;
     color: #ffffff;
-    border-color: #7ec8ff;
-    box-shadow: 0 0 14px rgba(77, 166, 255, 0.55), inset 4px 0 0 #4da6ff;
+    border-color: #ffe066;
+    box-shadow: 0 0 14px rgba(255, 210, 63, 0.55), inset 4px 0 0 #ffd23f;
   }
   #choices button.skill-btn-charge:not(:disabled):hover,
   #choices button.skill-btn-charge:not(:disabled):focus-visible {
@@ -1534,4 +1534,699 @@ body {
   color: #888888 !important;
   background: #050507 !important;
   cursor: not-allowed;
+}
+
+
+/* =========================================================
+   第十二版（v12）新增：
+   1. 技能圖鑑畫面與頂部分類切換按鈕（全部／攻擊紅／防禦黃／蓄力綠）
+   2. 全按鈕向下凹按壓效果、技能按鈕專屬能量擴散光圈、CD 歸 0 微光提醒
+   3. 頂部勇者護盾條「左藍右黃」雙色分段、黃色護盾格擋網格與黃色碎裂碎片
+   4. 全域加血（綠字 +X）、技能加護盾（黃字 +X）、全屬性覺醒（綠字 +5）浮動跳字
+   5. 獲得技能飛入頂部按鈕動畫、蓄力綠光圈聚點飛入頂部 Buff 標籤與消耗飛走動畫
+   6. 全 15 種技能專屬視覺特效（全數不震動螢幕）
+   ========================================================= */
+
+/* ── 1. 標題畫面「技能圖鑑」與分類篩選按鈕 ── */
+#compendium-screen .compendium-header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+#compendium-screen .compendium-title {
+  font-size: 20px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  text-align: center;
+  color: #ffffff;
+}
+.compendium-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.comp-tab {
+  background: #05060a;
+  color: #cccccc;
+  border: 1px solid #777777;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: bold;
+  padding: 8px 6px;
+  cursor: pointer;
+  text-align: center;
+  border-radius: 2px;
+  transition: background 150ms ease, color 150ms ease, box-shadow 150ms ease, transform 80ms ease;
+}
+.comp-tab.tab-attack {
+  border-color: rgba(255, 77, 77, 0.65);
+  color: #ff9999;
+}
+.comp-tab.tab-defense {
+  border-color: rgba(255, 210, 63, 0.65);
+  color: #ffe066;
+}
+.comp-tab.tab-charge {
+  border-color: rgba(56, 211, 153, 0.65);
+  color: #6ee7b7;
+}
+.comp-tab.active {
+  background: #e8e8e8;
+  color: #000000;
+  border-color: #ffffff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.45);
+}
+.comp-tab.tab-attack.active {
+  background: #ff4d4d;
+  color: #000000;
+  border-color: #ff9999;
+  box-shadow: 0 0 12px rgba(255, 77, 77, 0.65);
+}
+.comp-tab.tab-defense.active {
+  background: #ffd23f;
+  color: #000000;
+  border-color: #fff099;
+  box-shadow: 0 0 12px rgba(255, 210, 63, 0.65);
+}
+.comp-tab.tab-charge.active {
+  background: #38d399;
+  color: #000000;
+  border-color: #a7f3d0;
+  box-shadow: 0 0 12px rgba(56, 211, 153, 0.65);
+}
+#compendium-screen .compendium-list {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid #555;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #030408;
+}
+#compendium-screen .menu {
+  flex-direction: row;
+  max-width: none;
+  margin-top: 0;
+}
+#compendium-screen .menu button {
+  flex: 1;
+}
+.comp-section-header {
+  font-size: 15px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  padding: 4px 8px;
+  margin-top: 4px;
+  border-left: 3px solid #e8e8e8;
+  background: rgba(255, 255, 255, 0.04);
+}
+.comp-section-header.cat-attack { border-left-color: #ff4d4d; color: #ff8080; }
+.comp-section-header.cat-defense { border-left-color: #ffd23f; color: #ffe066; }
+.comp-section-header.cat-charge { border-left-color: #38d399; color: #6ee7b7; }
+
+/* ── 2. 全遊戲所有按鈕「向下凹」效果 ＋ 技能按鈕專屬能量擴散 ＋ CD 歸 0 微光 ── */
+button:not(:disabled):not(.tester-btn) {
+  transition: transform 75ms ease, box-shadow 140ms ease, background-color 140ms ease;
+}
+#choices button:not(:disabled):active,
+.menu button:not(:disabled):active,
+#intro-screen .menu button:not(:disabled):active,
+#compendium-screen .menu button:not(:disabled):active,
+.mini-btn:not(:disabled):active,
+.comp-tab:not(:disabled):active,
+.tester-floor-list button:not(:disabled):active {
+  transform: translateY(2.5px) scale(0.985) !important;
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.75) !important;
+}
+
+/* 技能冷卻完畢（CD 由 1 歸 0）時的邊框微光提醒 */
+#choices button.skill-cd-ready {
+  animation: skillCdReadyPulse 2200ms ease-out 1;
+}
+@keyframes skillCdReadyPulse {
+  0% { filter: brightness(1); }
+  30% { filter: brightness(1.65); box-shadow: 0 0 18px 4px rgba(255, 255, 255, 0.75); }
+  100% { filter: brightness(1); }
+}
+
+/* 技能按鈕按下時的專屬向外擴散能量光圈（浮於 #fx-flight-layer 上） */
+.skill-energy-ripple {
+  position: fixed;
+  pointer-events: none;
+  border: 2px solid var(--ripple-color, #ffffff);
+  box-shadow: 0 0 14px var(--ripple-color, #ffffff), inset 0 0 8px var(--ripple-color, #ffffff);
+  border-radius: 3px;
+  z-index: 40;
+  animation: skillEnergyRippleOut 920ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes skillEnergyRippleOut {
+  0% {
+    opacity: 0.95;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scaleX(1.08) scaleY(1.45);
+  }
+}
+
+/* ── 3. 頂部勇者面板常駐 Buff 標籤（#hero-panel-tag）與未消耗保留提示 ── */
+.hero-buff-tag {
+  font-size: 13px;
+  font-weight: bold;
+  color: #6ee7b7;
+  text-shadow: 0 0 8px rgba(56, 211, 153, 0.55);
+  letter-spacing: 0.5px;
+}
+.hero-buff-tag.pop-in {
+  animation: buffTagPopIn 720ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes buffTagPopIn {
+  0% { transform: scale(0.6); opacity: 0; filter: brightness(1.8); }
+  60% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; filter: brightness(1); }
+}
+#log .charge-keep-hint,
+#battle-log .charge-keep-hint,
+#history-content .charge-keep-hint {
+  color: #6ee7b7;
+  font-size: 13.5px;
+  font-weight: bold;
+}
+
+/* ── 4. 頂部勇者護盾條「左藍右黃」雙色分段 ＋ 黃色護盾網格光效與黃色碎裂碎片 ── */
+.bar-fill.shield-fill-yellow {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #ffd23f 0%, #ffe885 100%);
+  box-shadow: 0 0 8px rgba(255, 210, 63, 0.65);
+  transition: left 550ms ease-out, width 550ms ease-out;
+  z-index: 3;
+}
+
+/* 黃色護盾完全擋下攻擊（.glow-yellow-shield，不震動螢幕） */
+#dialogue-stage.glow-yellow-shield, #log.glow-yellow-shield {
+  animation: dialogueGlowYellowShield 1300ms ease-out forwards;
+}
+.glow-yellow-shield .shield-wave-sweep {
+  background: linear-gradient(
+    115deg,
+    transparent 25%,
+    rgba(255, 210, 63, 0.12) 40%,
+    rgba(255, 238, 153, 0.52) 50%,
+    rgba(255, 210, 63, 0.14) 60%,
+    transparent 75%
+  );
+  animation: shieldWaveSweepAnim 1240ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.glow-yellow-shield .shield-hex-barrier {
+  background-image:
+    radial-gradient(circle at 50% 50%, rgba(255, 210, 63, 0.26) 0%, rgba(245, 158, 11, 0.08) 65%, transparent 100%),
+    repeating-linear-gradient(60deg, rgba(255, 232, 133, 0.18) 0px, rgba(255, 232, 133, 0.18) 1px, transparent 1px, transparent 14px),
+    repeating-linear-gradient(-60deg, rgba(255, 232, 133, 0.18) 0px, rgba(255, 232, 133, 0.18) 1px, transparent 1px, transparent 14px);
+  animation: shieldHexPulseAnim 1300ms ease-out forwards;
+}
+.bar-track.shield-track-glow-yellow {
+  border-color: #ffe885 !important;
+  box-shadow: 0 0 12px rgba(255, 210, 63, 0.9), inset 0 0 6px rgba(255, 232, 133, 0.6) !important;
+}
+@keyframes dialogueGlowYellowShield {
+  0% { box-shadow: 0 0 0 0 transparent; border-color: #555; }
+  35% {
+    box-shadow: 0 0 20px 5px #ffd23f, inset 0 0 16px #ffe885;
+    border-color: #ffe885;
+  }
+  100% { box-shadow: 0 0 0 0 transparent; border-color: #555; }
+}
+
+/* 黃色護盾歸零碎裂（.shatter-yellow-shield，不震動螢幕） */
+#dialogue-stage.shatter-yellow-shield, #log.shatter-yellow-shield {
+  animation: dialogueYellowShatterAnim 1520ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+.shatter-yellow-shield .shield-crack-svg {
+  filter: drop-shadow(0 0 8px #ffd23f) drop-shadow(0 0 14px #f59e0b);
+  animation: crackFlashAnim 1480ms ease-out forwards;
+}
+.shatter-yellow-shield .shield-crack-svg path:first-child {
+  stroke: #ffe885 !important;
+}
+.shatter-yellow-shield .ice-shard {
+  background: linear-gradient(135deg, #ffffff 0%, #ffe885 45%, #f59e0b 100%);
+  box-shadow: 0 0 10px #ffd23f;
+  animation: shardExplodeAnim 1500ms cubic-bezier(0.15, 0.85, 0.25, 1) forwards;
+}
+.bar-track.shield-track-shatter-yellow {
+  animation: shieldBarShatterYellowFlash 1480ms ease-out forwards;
+}
+@keyframes dialogueYellowShatterAnim {
+  0% {
+    border-color: #ffffff;
+    box-shadow: 0 0 26px 7px rgba(255, 232, 133, 0.95), inset 0 0 24px rgba(255, 255, 255, 0.85);
+  }
+  30% {
+    border-color: #ffe885;
+    box-shadow: 0 0 20px 5px rgba(255, 210, 63, 0.85), inset 0 0 16px rgba(255, 210, 63, 0.6);
+  }
+  65% {
+    border-color: #ffd23f;
+    box-shadow: 0 0 12px 3px rgba(245, 158, 11, 0.45), inset 0 0 8px rgba(245, 158, 11, 0.25);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+    border-color: #555;
+  }
+}
+@keyframes shieldBarShatterYellowFlash {
+  0%, 25% {
+    border-color: #ffffff;
+    box-shadow: 0 0 16px 4px #ffe885, inset 0 0 10px #ffffff;
+  }
+  60% {
+    border-color: #ffd23f;
+    box-shadow: 0 0 10px 2px #f59e0b;
+  }
+  100% {
+    border-color: #555;
+    box-shadow: none;
+  }
+}
+
+/* ── 5. 全域加血（綠字 +X）、加護盾（黃字 +X）、屬性加成（綠字 +5）浮動跳字與條閃光 ── */
+.stat-bar-group,
+.stat-cell {
+  position: relative;
+}
+.bar-track.bar-flash-green {
+  animation: barFlashGreenAnim 1240ms ease-out;
+}
+.bar-track.bar-flash-yellow {
+  animation: barFlashYellowAnim 1240ms ease-out;
+}
+@keyframes barFlashGreenAnim {
+  0%, 30% {
+    border-color: #a7f3d0;
+    box-shadow: 0 0 14px 3px rgba(56, 211, 153, 0.9), inset 0 0 8px rgba(167, 243, 208, 0.7);
+  }
+  100% {
+    border-color: #555;
+    box-shadow: none;
+  }
+}
+@keyframes barFlashYellowAnim {
+  0%, 30% {
+    border-color: #fff099;
+    box-shadow: 0 0 14px 3px rgba(255, 210, 63, 0.9), inset 0 0 8px rgba(255, 232, 133, 0.7);
+  }
+  100% {
+    border-color: #555;
+    box-shadow: none;
+  }
+}
+.stat-cell.stat-flash-green .val {
+  animation: statValFlashGreen 1400ms ease-out;
+}
+.stat-cell.stat-flash-red .val,
+.stat-cell.stat-flash-red .debuff {
+  animation: statValFlashRed 1300ms ease-out;
+}
+@keyframes statValFlashGreen {
+  0%, 35% { color: #38d399; text-shadow: 0 0 12px #38d399, 0 0 20px #a7f3d0; transform: scale(1.2); }
+  100% { color: #fff; text-shadow: none; transform: scale(1); }
+}
+@keyframes statValFlashRed {
+  0%, 35% { color: #ff4d4d; text-shadow: 0 0 12px #ff4d4d, 0 0 20px #ff9999; }
+  100% { text-shadow: none; }
+}
+
+.float-plus-badge {
+  position: fixed;
+  pointer-events: none;
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: bold;
+  z-index: 45;
+  white-space: nowrap;
+  animation: floatPlusUpFade 1900ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+.float-plus-badge.plus-green {
+  color: #38d399;
+  text-shadow: 0 0 8px rgba(56, 211, 153, 0.9), 0 0 2px #000;
+}
+.float-plus-badge.plus-yellow {
+  color: #ffd23f;
+  text-shadow: 0 0 8px rgba(255, 210, 63, 0.9), 0 0 2px #000;
+}
+@keyframes floatPlusUpFade {
+  0% { opacity: 0; transform: translate(-50%, 4px) scale(0.85); }
+  18% { opacity: 1; transform: translate(-50%, -4px) scale(1.08); }
+  75% { opacity: 0.95; transform: translate(-50%, -16px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -24px) scale(0.95); }
+}
+
+/* ── 6. 獲得技能時：殘頁卡片消散化為光點飛入頂部「技能」按鈕 ── */
+#skill-acquire-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 38;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+#skill-acquire-overlay.show {
+  opacity: 1;
+}
+.skill-acquire-card {
+  background: #060912;
+  border: 2px solid var(--acq-color, #38d399);
+  box-shadow: 0 0 24px var(--acq-color, #38d399), inset 0 0 14px rgba(255, 255, 255, 0.12);
+  padding: 18px 30px;
+  text-align: center;
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transform: scale(0.85);
+  opacity: 0;
+}
+#skill-acquire-overlay.card-in .skill-acquire-card {
+  animation: skillCardAppearDissolve 1440ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.skill-acquire-card .acq-sub {
+  font-size: 13px;
+  color: #aaaaaa;
+  letter-spacing: 2px;
+}
+.skill-acquire-card .acq-name {
+  font-size: 24px;
+  font-weight: bold;
+  color: #ffffff;
+  letter-spacing: 2px;
+  text-shadow: 0 0 12px var(--acq-color, #38d399);
+}
+.skill-acquire-card .acq-cat {
+  font-size: 13.5px;
+  font-weight: bold;
+  color: var(--acq-color, #38d399);
+}
+@keyframes skillCardAppearDissolve {
+  0% { opacity: 0; transform: scale(0.82); }
+  25% { opacity: 1; transform: scale(1.03); }
+  68% { opacity: 1; transform: scale(1); filter: brightness(1.15); }
+  100% { opacity: 0; transform: scale(0.45); filter: brightness(2); }
+}
+
+#fx-flight-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 42;
+  overflow: hidden;
+}
+.fx-flying-dot {
+  position: fixed;
+  width: var(--dot-size, 9px);
+  height: var(--dot-size, 9px);
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 10px 3px var(--dot-color, #38d399), 0 0 18px 5px var(--dot-color, #38d399);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+/* ── 7. 全 15 種技能專屬視覺特效（全數不震動螢幕） ── */
+
+/* (1) 【破盾斬】：敵人面板紅色 X 形交叉兩道刀光 */
+#enemy-panel .enemy-panel-slash-2 {
+  position: absolute;
+  top: 50%;
+  left: -25%;
+  width: 150%;
+  height: 4px;
+  background: linear-gradient(90deg, transparent 0%, #ff4d4d 25%, #ffffff 50%, #ff4d4d 75%, transparent 100%);
+  box-shadow: 0 0 14px #ff4d4d, 0 0 26px #ff1744;
+  transform: translateY(-50%) rotate(20deg) scaleX(0);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+#enemy-panel.slash-x-red .enemy-panel-slash {
+  height: 5px;
+  background: linear-gradient(90deg, transparent 0%, #ff4d4d 25%, #ffffff 50%, #ff4d4d 75%, transparent 100%);
+  box-shadow: 0 0 14px #ff4d4d, 0 0 26px #ff1744;
+  animation: enemySlashAnim calc(var(--sword-ms, 650ms) * 2) cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+}
+#enemy-panel.slash-x-red .enemy-panel-slash-2 {
+  animation: enemySlashX2Anim calc(var(--sword-ms, 650ms) * 2) cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+}
+@keyframes enemySlashX2Anim {
+  0%, 10% { transform: translateY(-50%) rotate(20deg) scaleX(0); opacity: 0; }
+  30% { transform: translateY(-50%) rotate(20deg) scaleX(1); opacity: 1; }
+  70% { transform: translateY(-50%) rotate(20deg) scaleX(1); opacity: 0.95; }
+  100% { transform: translateY(-50%) rotate(20deg) scaleX(1.1); opacity: 0; }
+}
+
+/* (2) 【捨身決絕】：勇者對話框閃暗紅光 ＋ 敵人面板左下到右上加粗深紅色刀光 */
+#dialogue-stage.glow-dark-red {
+  animation: dialogueDarkRedPulse 760ms ease-out;
+}
+@keyframes dialogueDarkRedPulse {
+  0% { box-shadow: 0 0 0 0 transparent; border-color: #555; }
+  40% { box-shadow: 0 0 24px 6px rgba(185, 28, 28, 0.9), inset 0 0 20px rgba(153, 27, 27, 0.75); border-color: #dc2626; }
+  100% { box-shadow: 0 0 0 0 transparent; border-color: #555; }
+}
+#enemy-panel.slash-bl-tr-crimson .enemy-panel-slash {
+  height: 9px;
+  background: linear-gradient(90deg, transparent 0%, #991b1b 18%, #ff2b2b 45%, #ffdada 50%, #ff2b2b 55%, #991b1b 82%, transparent 100%);
+  box-shadow: 0 0 18px #dc2626, 0 0 32px #7f1d1d;
+  animation: enemySlashBlTrAnim calc(var(--sword-ms, 650ms) * 2) cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+}
+@keyframes enemySlashBlTrAnim {
+  0% { transform: translateY(-50%) rotate(-24deg) scaleX(0); transform-origin: 15% 100%; opacity: 0; }
+  22% { transform: translateY(-50%) rotate(-24deg) scaleX(1); transform-origin: 15% 100%; opacity: 1; }
+  68% { transform: translateY(-50%) rotate(-24deg) scaleX(1); transform-origin: 15% 100%; opacity: 0.96; }
+  100% { transform: translateY(-50%) rotate(-24deg) scaleX(1.08); transform-origin: 15% 100%; opacity: 0; }
+}
+
+/* (3) 【墨焰燃蝕】：普攻橘紅刀光 ＋ 敵人面板中央浮現🔥放大淡出並往上飄橘紅小光點 */
+#enemy-panel.slash-flame-orange .enemy-panel-slash {
+  height: 6px;
+  background: linear-gradient(90deg, transparent 0%, #ff6b00 22%, #fff3b0 50%, #ff4500 78%, transparent 100%);
+  box-shadow: 0 0 16px #ff6b00, 0 0 28px #ff2b00;
+  animation: enemySlashAnim calc(var(--sword-ms, 650ms) * 2) cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+}
+.enemy-flame-burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 14;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.enemy-flame-burst .flame-icon {
+  font-size: 38px;
+  filter: drop-shadow(0 0 12px #ff5722);
+  animation: flameIconScaleFade 1360ms ease-out forwards;
+}
+@keyframes flameIconScaleFade {
+  0% { opacity: 0; transform: scale(0.55); }
+  30% { opacity: 0.88; transform: scale(1.12); }
+  100% { opacity: 0; transform: scale(1.45) translateY(-10px); }
+}
+.enemy-flame-burst .flame-ember {
+  position: absolute;
+  bottom: 4px;
+  left: var(--ex, 50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ffb703;
+  box-shadow: 0 0 8px #ff5722, 0 0 12px #fb8500;
+  animation: emberFloatUp 1360ms ease-out forwards;
+}
+@keyframes emberFloatUp {
+  0% { opacity: 0.95; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(var(--ey, -58px)) translateX(var(--edx, 8px)) scale(0.3); }
+}
+
+/* (4) 【破綻洞悉】與【凝神聚氣】：敵人面板中央紅／綠色十字準星鎖定框 ＋ 紅邊／綠邊／黃綠邊加粗刀光 */
+.enemy-crosshair-fx {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 58px;
+  height: 58px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 15;
+  border: 2px solid var(--ch-color, #ff4d4d);
+  box-shadow: 0 0 14px var(--ch-color, #ff4d4d), inset 0 0 8px var(--ch-color, #ff4d4d);
+  border-radius: 50%;
+  animation: crosshairLockPulse 1040ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.enemy-crosshair-fx::before,
+.enemy-crosshair-fx::after {
+  content: "";
+  position: absolute;
+  background: var(--ch-color, #ff4d4d);
+  box-shadow: 0 0 8px var(--ch-color, #ff4d4d);
+}
+.enemy-crosshair-fx::before {
+  left: -10px;
+  right: -10px;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-50%);
+}
+.enemy-crosshair-fx::after {
+  top: -10px;
+  bottom: -10px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+}
+@keyframes crosshairLockPulse {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.65) rotate(-25deg); }
+  38% { opacity: 1; transform: translate(-50%, -50%) scale(0.95) rotate(0deg); }
+  72% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+}
+
+/* 破綻洞悉：外圍帶紅邊的加粗白刀光 */
+#enemy-panel.slash-thick-red-edge .enemy-panel-slash {
+  height: 8px;
+  background: linear-gradient(90deg, transparent 0%, #ffffff 22%, #ffffff 78%, transparent 100%);
+  border-top: 2px solid #ff4d4d;
+  border-bottom: 2px solid #ff4d4d;
+  box-shadow: 0 0 14px #ff4d4d, 0 0 26px #ff1744;
+  animation: enemySlashAnim calc(var(--sword-ms, 650ms) * 2) cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+}
+
+/* 蓄力爆發：加粗 2 倍、外圍帶亮綠邊的白色刀光 */
+#enemy-panel.slash-thick-green-2x .enemy-panel-slash {
+  height: 10px;
+  background: linear-gradient(90deg, transparent 0%, #ffffff 20%, #ffffff 80%, transparent 100%);
+  border-top: 2.5px solid #38d399;
+  border-bottom: 2.5px solid #38d399;
+  box-shadow: 0 0 18px #38d399, 0 0 32px #10b981;
+  animation: enemySlashAnim calc(var(--sword-ms, 650ms) * 2) cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+}
+
+/* 壁壘轉化：外圍帶黃綠雙色光邊的加粗白色刀光 */
+#enemy-panel.slash-thick-yellowgreen .enemy-panel-slash {
+  height: 10px;
+  background: linear-gradient(90deg, transparent 0%, #ffffff 20%, #ffffff 80%, transparent 100%);
+  border-top: 2.5px solid #ffd23f;
+  border-bottom: 2.5px solid #38d399;
+  box-shadow: 0 -4px 16px #ffd23f, 0 4px 16px #38d399, 0 0 28px rgba(255, 210, 63, 0.8);
+  animation: enemySlashAnim calc(var(--sword-ms, 650ms) * 2) cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+}
+
+/* 凝神聚氣：骰子框或撲克牌外框閃亮綠光 */
+#dice .face.force-max-green-glow,
+#poker-draw .drawn-card-wrapper.force-max-green-glow .poker-card {
+  border-color: #38d399 !important;
+  box-shadow: 0 0 24px 6px rgba(56, 211, 153, 0.9), inset 0 0 14px rgba(56, 211, 153, 0.55) !important;
+}
+
+/* (5) 點擊不跳過攻擊技能時的對話框邊框啟動微光 */
+#dialogue-stage.glow-orange-micro { animation: microGlowOrange 680ms ease-out; }
+#dialogue-stage.glow-green-micro { animation: microGlowGreen 680ms ease-out; }
+#dialogue-stage.glow-yellow-micro { animation: microGlowYellow 680ms ease-out; }
+@keyframes microGlowOrange {
+  50% { border-color: #ff6b00; box-shadow: 0 0 14px rgba(255, 107, 0, 0.65), inset 0 0 10px rgba(255, 107, 0, 0.3); }
+}
+@keyframes microGlowGreen {
+  50% { border-color: #38d399; box-shadow: 0 0 14px rgba(56, 211, 153, 0.65), inset 0 0 10px rgba(56, 211, 153, 0.3); }
+}
+@keyframes microGlowYellow {
+  50% { border-color: #ffd23f; box-shadow: 0 0 14px rgba(255, 210, 63, 0.65), inset 0 0 10px rgba(255, 210, 63, 0.3); }
+}
+
+/* (6) 對話框由下往上掃過「黃色六角網格光效」或「綠色回血波紋」 */
+.dialogue-sweep-fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 15;
+  opacity: 0;
+}
+.dialogue-sweep-fx.sweep-yellow-grid {
+  background-image:
+    linear-gradient(to top, rgba(255, 210, 63, 0.38) 0%, rgba(255, 232, 133, 0.16) 55%, transparent 100%),
+    repeating-linear-gradient(60deg, rgba(255, 210, 63, 0.25) 0px, rgba(255, 210, 63, 0.25) 1px, transparent 1px, transparent 14px),
+    repeating-linear-gradient(-60deg, rgba(255, 210, 63, 0.25) 0px, rgba(255, 210, 63, 0.25) 1px, transparent 1px, transparent 14px);
+  border-top: 2px solid #ffe885;
+  box-shadow: 0 -6px 18px rgba(255, 210, 63, 0.65);
+  animation: sweepBottomToTop 960ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.dialogue-sweep-fx.sweep-green-wave {
+  background: linear-gradient(
+    to top,
+    rgba(56, 211, 153, 0.05) 0%,
+    rgba(56, 211, 153, 0.36) 50%,
+    rgba(167, 243, 208, 0.55) 85%,
+    transparent 100%
+  );
+  border-top: 2px solid #a7f3d0;
+  box-shadow: 0 -6px 18px rgba(56, 211, 153, 0.65);
+  animation: sweepBottomToTop 920ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes sweepBottomToTop {
+  0% { opacity: 0; transform: translateY(100%); }
+  20% { opacity: 1; }
+  80% { opacity: 0.95; }
+  100% { opacity: 0; transform: translateY(-100%); }
+}
+
+/* (7) 【護盾反震】：從勇者對話框向外擴散至螢幕邊界的黃色圓形波紋 */
+.reflect-expand-ring {
+  position: fixed;
+  border-radius: 50%;
+  border: 3px solid #ffd23f;
+  box-shadow: 0 0 18px 4px rgba(255, 210, 63, 0.85), inset 0 0 14px rgba(255, 232, 133, 0.65);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  z-index: 41;
+}
+
+/* (8) 【晶化壁壘】：維持整回合的加粗黃色雙層亮框（回合結束平滑淡出） */
+#dialogue-stage.crystal-wall-active {
+  border: 2px solid #ffe885 !important;
+  box-shadow: 0 0 14px rgba(255, 210, 63, 0.65), inset 0 0 0 3px rgba(255, 210, 63, 0.35), inset 0 0 12px rgba(255, 210, 63, 0.25) !important;
+  transition: border-color 320ms ease, box-shadow 320ms ease;
+}
+
+/* (9) 【全神蓄勢】：本回合 30% 減傷淡綠邊框與蓄力綠光圈向中心收縮聚攏動畫 */
+#dialogue-stage.charge-dmg-reduce-active {
+  border-color: #38d399 !important;
+  box-shadow: 0 0 12px rgba(56, 211, 153, 0.45), inset 0 0 10px rgba(56, 211, 153, 0.18) !important;
+  transition: border-color 300ms ease, box-shadow 300ms ease;
+}
+.charge-condense-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  border: 2.5px solid #38d399;
+  box-shadow: 0 0 18px #38d399, inset 0 0 14px #38d399;
+  transform: translate(-50%, -50%) scale(1.3);
+  pointer-events: none;
+  z-index: 16;
+  animation: chargeRingCondense 840ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+@keyframes chargeRingCondense {
+  0% { opacity: 0.2; transform: translate(-50%, -50%) scale(1.35); }
+  30% { opacity: 1; }
+  90% { opacity: 1; transform: translate(-50%, -50%) scale(0.05); background: rgba(56, 211, 153, 0.85); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.02); }
 }
