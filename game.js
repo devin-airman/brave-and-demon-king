@@ -1584,12 +1584,15 @@ function spawnSlashImpactSparks(cls) {
   const sx = isCross ? "50%" : "90%";
   const sy = isCross ? "50%" : "82%";
 
-  wrap.innerHTML = vectors.map(([dx, dy], idx) => {
+  const centerBurstHtml = isCross
+    ? `<div class="slash-x-center-burst"></div><div class="slash-x-center-ring"></div>`
+    : "";
+  wrap.innerHTML = centerBurstHtml + vectors.map(([dx, dy], idx) => {
     const c = colors[idx % colors.length];
     return `<div class="slash-impact-spark" style="--sx:${sx};--sy:${sy};--dx:${dx}px;--dy:${dy}px;--spark-color:${c};"></div>`;
   }).join("");
   $ep.appendChild(wrap);
-  setTimeout(() => { wrap.remove(); }, 820);
+  setTimeout(() => { wrap.remove(); }, 460);
 }
 
 async function enemyPanelSlashAnim(variantClass = "slash-hit", extraClasses = []) {
@@ -1607,9 +1610,10 @@ async function enemyPanelSlashAnim(variantClass = "slash-hit", extraClasses = []
   const cls = variantClass || "slash-hit";
   $ep.classList.add(cls, ...extraClasses);
   if (cls !== "slash-hit") {
-    setTimeout(() => { spawnSlashImpactSparks(cls); }, 280);
+    const sparkDelay = (cls === "slash-x-red") ? 95 : 105;
+    setTimeout(() => { spawnSlashImpactSparks(cls); }, sparkDelay);
   }
-  const dur = (cls === "slash-hit") ? SWORD_MS : (SWORD_MS * 2);
+  const dur = (cls === "slash-hit") ? 300 : ((cls === "slash-x-red") ? 480 : 440);
   await sleep(dur);
   $ep.classList.remove(...ALL_SLASH_CLASSES);
 }
@@ -2388,7 +2392,7 @@ async function useCombatSkill(sk) {
     const hpDmg = Math.max(0, baseDmg - baseUsed);
 
     const slashP = enemyPanelSlashAnim("slash-x-red");
-    await sleep(300);
+    await sleep(110);
     enemy.shield -= shdBroken;
     enemy.hp -= hpDmg;
     const enemyLostHp = enemy.hp < enemyHpBefore;
@@ -2425,7 +2429,7 @@ async function useCombatSkill(sk) {
 
     const trueDmg = Math.floor(calcCost * 2.5 + highAtk * 0.6);
     const slashP = enemyPanelSlashAnim("slash-x-red");
-    await sleep(300);
+    await sleep(110);
     enemy.hp -= trueDmg;
     renderStatus();
     const mainLine = `勇者施放【捨身決絕】［消耗 ${actualCost} 點生命｜真實傷害］ ➔ 造成 ${trueDmg} 點真實傷害！（生命 −${trueDmg}）`;
@@ -3024,7 +3028,7 @@ async function heroAttack(atkType) {
   }
 
   const slashP = enemyPanelSlashAnim(slashVariant, slashExtraClasses);
-  await sleep(slashVariant === "slash-hit" ? 150 : 300);
+  await sleep(slashVariant === "slash-hit" ? 85 : 115);
   enemy.shield = heroTarget.shield;
   enemy.hp = heroTarget.hp;
 

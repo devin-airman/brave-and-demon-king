@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>勇者與魔王</title>
+  <meta name="description" content="《勇者與魔王》是一款極簡終端機風格的文字冒險 RPG。挑戰 5 層隨機地牢、15 種局內戰技與二階段心魔魔王！">
+  <meta property="og:title" content="勇者與魔王">
+  <meta property="og:description" content="《勇者與魔王》是一款極簡終端機風格的文字冒險 RPG。挑戰 5 層隨機地牢、15 種局內戰技與二階段心魔魔王！">
+  <meta property="og:type" content="website">
   <style>
 /* ===== 基本樣式：黑底白字終端機風格 ===== */
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -187,15 +191,23 @@ body {
   transition: border-color 280ms ease, box-shadow 280ms ease;
 }
 
-/* 敵人面板專屬劈刀動畫（普通攻擊預設：從左下角斜劈向右上角，1倍標準粗度 4px 純白刀光，並完整從左下收束消失至右上） */
+/* 敵人面板專屬劈刀動畫（第十五版 v15 升級：尖銳刀尖＋錐形拖尾寒鋼劍氣，普通攻擊提速至 300ms 左下➔右上極速破空） */
 #enemy-panel .enemy-panel-slash {
   position: absolute;
   top: 100%;
   left: 0%;
   width: var(--ep-diag-len, 104%);
-  height: 4px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.85) 0%, #ffffff 10%, #ffffff 92%, rgba(255, 255, 255, 0.98) 100%);
-  box-shadow: 0 0 12px #ffffff, 0 0 24px #4da6ff;
+  height: 9px;
+  background: linear-gradient(180deg,
+    rgba(77, 166, 255, 0) 0%,
+    rgba(130, 200, 255, 0.9) 22%,
+    #ffffff 42%,
+    #ffffff 58%,
+    rgba(130, 200, 255, 0.9) 78%,
+    rgba(77, 166, 255, 0) 100%
+  );
+  clip-path: polygon(0% 50%, 15% 32%, 45% 12%, 74% 0%, 92% 18%, 100% 50%, 92% 82%, 74% 100%, 45% 88%, 15% 68%);
+  filter: drop-shadow(0 0 6px #ffffff) drop-shadow(0 0 14px #4da6ff);
   transform-origin: 0% 50%;
   transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(0%) scaleX(0);
   opacity: 0;
@@ -203,53 +215,66 @@ body {
   z-index: 10;
 }
 
-#enemy-panel.slash-hit .enemy-panel-slash {
-  animation: enemySlashBlToTr calc(var(--sword-ms, 650ms) * 0.95) ease-in-out forwards;
+#enemy-panel .enemy-panel-slash::after {
+  content: "";
+  position: absolute;
+  right: 3%;
+  top: 50%;
+  width: 22px;
+  height: 120%;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffffff 0%, rgba(255, 255, 255, 0.85) 45%, transparent 75%);
+  pointer-events: none;
 }
 
-/* 建議 ① 完整收束修正：0%~34% 從起點角落劈至終點角落 ➔ 34%~48% 定格閃耀 ➔ 48%~94% 維持 opacity:1 將刀尾從起點完整收束至終點角落 (translateX(100%) scaleX(0)) */
+#enemy-panel.slash-hit .enemy-panel-slash {
+  animation: enemySlashBlToTr 300ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* 第十五版 v15 極速劍氣曲線：0%~28% 極速破空斬至終點 ➔ 28%~42% 白刃高光瞬間滯留 ➔ 42%~95% 錐形刀尾高速收束至終點角落 */
 @keyframes enemySlashBlToTr {
   0% {
-    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(0%) scaleX(0);
+    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(0%) scaleX(0) scaleY(0.65);
     opacity: 1;
   }
-  34% {
-    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(0%) scaleX(1);
+  28% {
+    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(0%) scaleX(1) scaleY(1.08);
     opacity: 1;
   }
-  48% {
-    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(0%) scaleX(1);
+  42% {
+    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(8%) scaleX(0.92) scaleY(1);
     opacity: 1;
   }
-  94% {
-    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(100%) scaleX(0);
+  95% {
+    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(100%) scaleX(0) scaleY(0.4);
     opacity: 1;
   }
   100% {
-    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(100%) scaleX(0);
+    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(100%) scaleX(0) scaleY(0.2);
     opacity: 0;
   }
 }
 
 @keyframes enemySlashTlToBr {
   0% {
-    transform: translateY(-50%) rotate(var(--ep-diag-angle, 9deg)) translateX(0%) scaleX(0);
+    transform: translateY(-50%) rotate(var(--ep-diag-angle, 9deg)) translateX(0%) scaleX(0) scaleY(0.65);
     opacity: 1;
   }
-  34% {
-    transform: translateY(-50%) rotate(var(--ep-diag-angle, 9deg)) translateX(0%) scaleX(1);
+  28% {
+    transform: translateY(-50%) rotate(var(--ep-diag-angle, 9deg)) translateX(0%) scaleX(1) scaleY(1.12);
     opacity: 1;
   }
-  48% {
-    transform: translateY(-50%) rotate(var(--ep-diag-angle, 9deg)) translateX(0%) scaleX(1);
+  42% {
+    transform: translateY(-50%) rotate(var(--ep-diag-angle, 9deg)) translateX(8%) scaleX(0.92) scaleY(1);
     opacity: 1;
   }
-  94% {
-    transform: translateY(-50%) rotate(var(--ep-diag-angle, 9deg)) translateX(100%) scaleX(0);
+  95% {
+    transform: translateY(-50%) rotate(var(--ep-diag-angle, 9deg)) translateX(100%) scaleX(0) scaleY(0.4);
     opacity: 1;
   }
   100% {
-    transform: translateY(-50%) rotate(var(--ep-diag-angle, 9deg)) translateX(100%) scaleX(0);
+    transform: translateY(-50%) rotate(var(--ep-diag-angle, 9deg)) translateX(100%) scaleX(0) scaleY(0.2);
     opacity: 0;
   }
 }
@@ -2039,60 +2064,126 @@ button:not(:disabled):not(.tester-btn) {
 
 /* ── 7. 全 15 種技能專屬視覺特效（全數不震動螢幕） ── */
 
-/* (1) 直接攻擊技能（【破盾斬】、【捨身決絕】）：敵人面板 2 倍粗（8px）白芯紅邊 X 形交叉雙刀光（完整收束至對角終點） */
+/* (1) 直接攻擊技能（【破盾斬】、【捨身決絕】）：第十五版 v15 升級 480ms 微時間差雙刀交錯白熱電漿刃 ＋ 中心聚能光爆環 */
 #enemy-panel .enemy-panel-slash-2 {
   position: absolute;
   top: 100%;
   left: 0%;
   width: var(--ep-diag-len, 104%);
-  height: 8px;
-  background: linear-gradient(90deg, rgba(255,255,255,0.85) 0%, #ffffff 10%, #ffffff 92%, rgba(255,255,255,0.98) 100%);
-  border-top: 2px solid #ff4d4d;
-  border-bottom: 2px solid #ff4d4d;
-  box-shadow: 0 0 16px #ff4d4d, 0 0 28px #ff1744;
+  height: 18px;
+  background: linear-gradient(180deg,
+    rgba(255, 23, 68, 0) 0%,
+    rgba(255, 77, 77, 0.95) 20%,
+    #ffffff 38%,
+    #ffffff 62%,
+    rgba(255, 77, 77, 0.95) 80%,
+    rgba(255, 23, 68, 0) 100%
+  );
+  clip-path: polygon(0% 50%, 15% 32%, 45% 12%, 74% 0%, 92% 18%, 100% 50%, 92% 82%, 74% 100%, 45% 88%, 15% 68%);
+  filter: drop-shadow(0 0 8px #ff4d4d) drop-shadow(0 0 18px #ff1744);
   transform-origin: 0% 50%;
   transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(0%) scaleX(0);
   opacity: 0;
   pointer-events: none;
-  z-index: 10;
+  z-index: 11;
+}
+#enemy-panel .enemy-panel-slash-2::after {
+  content: "";
+  position: absolute;
+  right: 3%;
+  top: 50%;
+  width: 26px;
+  height: 120%;
+  transform: translateY(-50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffffff 0%, rgba(255, 255, 255, 0.9) 45%, transparent 75%);
+  pointer-events: none;
 }
 #enemy-panel.slash-x-red .enemy-panel-slash {
   top: 0%;
   left: 0%;
-  height: 8px;
-  background: linear-gradient(90deg, rgba(255,255,255,0.85) 0%, #ffffff 10%, #ffffff 92%, rgba(255,255,255,0.98) 100%);
-  border-top: 2px solid #ff4d4d;
-  border-bottom: 2px solid #ff4d4d;
-  box-shadow: 0 0 16px #ff4d4d, 0 0 28px #ff1744;
-  animation: enemySlashTlToBr calc(var(--sword-ms, 650ms) * 1.92) ease-in-out forwards;
+  height: 18px;
+  background: linear-gradient(180deg,
+    rgba(255, 23, 68, 0) 0%,
+    rgba(255, 77, 77, 0.95) 20%,
+    #ffffff 38%,
+    #ffffff 62%,
+    rgba(255, 77, 77, 0.95) 80%,
+    rgba(255, 23, 68, 0) 100%
+  );
+  filter: drop-shadow(0 0 8px #ff4d4d) drop-shadow(0 0 18px #ff1744);
+  animation: enemySlashTlToBr 430ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 #enemy-panel.slash-x-red .enemy-panel-slash-2 {
   top: 100%;
   left: 0%;
-  height: 8px;
-  animation: enemySlashX2BlToTr calc(var(--sword-ms, 650ms) * 1.92) ease-in-out forwards;
+  height: 18px;
+  animation: enemySlashX2BlToTr 480ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 @keyframes enemySlashX2BlToTr {
-  0%, 5% {
-    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(0%) scaleX(0);
+  0%, 11% {
+    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(0%) scaleX(0) scaleY(0.65);
+    opacity: 0;
+  }
+  12% {
+    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(0%) scaleX(0.05) scaleY(0.75);
     opacity: 1;
   }
   36% {
-    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(0%) scaleX(1);
+    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(0%) scaleX(1) scaleY(1.12);
     opacity: 1;
   }
   50% {
-    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(0%) scaleX(1);
+    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(8%) scaleX(0.92) scaleY(1);
     opacity: 1;
   }
-  95% {
-    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(100%) scaleX(0);
+  96% {
+    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(100%) scaleX(0) scaleY(0.4);
     opacity: 1;
   }
   100% {
-    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(100%) scaleX(0);
+    transform: translateY(-50%) rotate(calc(-1 * var(--ep-diag-angle, 9deg))) translateX(100%) scaleX(0) scaleY(0.2);
     opacity: 0;
   }
+}
+
+/* X 交叉中心聚能白光核心與紅色衝擊波環 */
+.slash-x-center-burst {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 24px;
+  height: 24px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffffff 0%, #ffffff 45%, rgba(255, 77, 77, 0.85) 75%, transparent 100%);
+  box-shadow: 0 0 18px 6px #ffffff, 0 0 32px 12px #ff1744;
+  pointer-events: none;
+  z-index: 16;
+  animation: slashXCoreFlash 320ms ease-out forwards;
+}
+.slash-x-center-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 20px;
+  height: 20px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 3px solid #ff4d4d;
+  box-shadow: 0 0 14px #ff1744, inset 0 0 10px #ff4d4d;
+  pointer-events: none;
+  z-index: 15;
+  animation: slashXRingExpand 380ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+@keyframes slashXCoreFlash {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  28% { opacity: 1; transform: translate(-50%, -50%) scale(1.65); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.2); }
+}
+@keyframes slashXRingExpand {
+  0% { opacity: 0.95; transform: translate(-50%, -50%) scale(0.6); border-width: 4px; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(7.5); border-width: 1px; }
 }
 
 /* (2) 【捨身決絕】：勇者對話框先閃暗紅光（隨後觸發 slash-x-red 雙倍粗紅色交叉刀光） */
@@ -2183,77 +2274,100 @@ button:not(:disabled):not(.tester-btn) {
   100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
 }
 
-/* ── 強化後的普通攻擊統一刀光規範（一律由左上角劈向右下角，2倍粗度 8px，白芯＋屬性色外框；雙蓄力疊加時 2.5倍粗度 10px） ── */
+/* ── 強化後的普通攻擊統一刀光規範（第十五版 v15 升級：440ms 白熱電漿流線光刃，左上➔右下 2倍粗 18px，雙蓄力疊加 2.5倍粗 23px） ── */
 
-/* (A) 攻擊類強化普攻（墨焰燃蝕、破綻洞悉、文字汲取）：左上➔右下 2倍粗（8px）白芯紅邊刀光 */
+/* (A) 攻擊類強化普攻（墨焰燃蝕、破綻洞悉、文字汲取）：左上➔右下 440ms 白熱紅蓮電漿刃 */
 #enemy-panel.slash-enh-red .enemy-panel-slash {
   top: 0%;
   left: 0%;
-  height: 8px;
-  background: linear-gradient(90deg, rgba(255,255,255,0.85) 0%, #ffffff 10%, #ffffff 92%, rgba(255,255,255,0.98) 100%);
-  border-top: 2px solid #ff4d4d;
-  border-bottom: 2px solid #ff4d4d;
-  box-shadow: 0 0 16px #ff4d4d, 0 0 28px #ff1744;
-  animation: enemySlashTlToBr calc(var(--sword-ms, 650ms) * 1.92) ease-in-out forwards;
+  height: 18px;
+  background: linear-gradient(180deg,
+    rgba(255, 23, 68, 0) 0%,
+    rgba(255, 77, 77, 0.96) 20%,
+    #ffffff 38%,
+    #ffffff 62%,
+    rgba(255, 77, 77, 0.96) 80%,
+    rgba(255, 23, 68, 0) 100%
+  );
+  filter: drop-shadow(0 0 8px #ff4d4d) drop-shadow(0 0 18px #ff1744);
+  animation: enemySlashTlToBr 440ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* (B) 護盾／防禦類強化普攻（文字汲盾）：左上➔右下 2倍粗（8px）白芯黃邊刀光 */
+/* (B) 護盾／防禦類強化普攻（文字汲盾）：左上➔右下 440ms 耀金壁壘電漿刃 */
 #enemy-panel.slash-enh-yellow .enemy-panel-slash {
   top: 0%;
   left: 0%;
-  height: 8px;
-  background: linear-gradient(90deg, rgba(255,255,255,0.85) 0%, #ffffff 10%, #ffffff 92%, rgba(255,255,255,0.98) 100%);
-  border-top: 2px solid #ffd23f;
-  border-bottom: 2px solid #ffd23f;
-  box-shadow: 0 0 16px #ffd23f, 0 0 28px #f59e0b;
-  animation: enemySlashTlToBr calc(var(--sword-ms, 650ms) * 1.92) ease-in-out forwards;
+  height: 18px;
+  background: linear-gradient(180deg,
+    rgba(245, 158, 11, 0) 0%,
+    rgba(255, 210, 63, 0.96) 20%,
+    #ffffff 38%,
+    #ffffff 62%,
+    rgba(255, 210, 63, 0.96) 80%,
+    rgba(245, 158, 11, 0) 100%
+  );
+  filter: drop-shadow(0 0 8px #ffd23f) drop-shadow(0 0 18px #f59e0b);
+  animation: enemySlashTlToBr 440ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* (C) 蓄力類強化普攻（全神蓄勢、凝神聚氣、極限過載、壁壘轉化）：左上➔右下 2倍粗（8px）白芯綠邊刀光 */
+/* (C) 蓄力類強化普攻（全神蓄勢、凝神聚氣、極限過載、壁壘轉化）：左上➔右下 440ms 翠綠疾風電漿刃 */
 #enemy-panel.slash-enh-green .enemy-panel-slash {
   top: 0%;
   left: 0%;
-  height: 8px;
-  background: linear-gradient(90deg, rgba(255,255,255,0.85) 0%, #ffffff 10%, #ffffff 92%, rgba(255,255,255,0.98) 100%);
-  border-top: 2px solid #38d399;
-  border-bottom: 2px solid #38d399;
-  box-shadow: 0 0 16px #38d399, 0 0 28px #10b981;
-  animation: enemySlashTlToBr calc(var(--sword-ms, 650ms) * 1.92) ease-in-out forwards;
+  height: 18px;
+  background: linear-gradient(180deg,
+    rgba(16, 185, 129, 0) 0%,
+    rgba(56, 211, 153, 0.96) 20%,
+    #ffffff 38%,
+    #ffffff 62%,
+    rgba(56, 211, 153, 0.96) 80%,
+    rgba(16, 185, 129, 0) 100%
+  );
+  filter: drop-shadow(0 0 8px #38d399) drop-shadow(0 0 18px #10b981);
+  animation: enemySlashTlToBr 440ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* (D) 跨類別疊加：蓄力類（綠）＋ 攻擊類（紅）雙色融合左上➔右下刀光 */
+/* (D) 跨類別疊加：蓄力類（綠）＋ 攻擊類（紅）雙色交織電漿刃 */
 #enemy-panel.slash-enh-green-red .enemy-panel-slash {
   top: 0%;
   left: 0%;
-  height: 8px;
-  background: linear-gradient(90deg, rgba(255,255,255,0.85) 0%, #ffffff 10%, #ffffff 92%, rgba(255,255,255,0.98) 100%);
-  border-top: 2px solid #38d399;
-  border-bottom: 2px solid #ff4d4d;
-  box-shadow: 0 -4px 16px #38d399, 0 4px 16px #ff4d4d, 0 0 28px rgba(255, 77, 77, 0.8);
-  animation: enemySlashTlToBr calc(var(--sword-ms, 650ms) * 1.92) ease-in-out forwards;
+  height: 20px;
+  background: linear-gradient(180deg,
+    rgba(16, 185, 129, 0) 0%,
+    rgba(56, 211, 153, 0.96) 18%,
+    #ffffff 38%,
+    #ffffff 62%,
+    rgba(255, 77, 77, 0.96) 82%,
+    rgba(255, 23, 68, 0) 100%
+  );
+  filter: drop-shadow(0 -3px 8px #38d399) drop-shadow(0 3px 8px #ff4d4d) drop-shadow(0 0 16px rgba(255, 77, 77, 0.8));
+  animation: enemySlashTlToBr 440ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* (E) 跨類別疊加：蓄力類（綠）＋ 護盾類（黃）雙色融合左上➔右下刀光 */
+/* (E) 跨類別疊加：蓄力類（綠）＋ 護盾類（黃）雙色交織電漿刃 */
 #enemy-panel.slash-enh-green-yellow .enemy-panel-slash {
   top: 0%;
   left: 0%;
-  height: 8px;
-  background: linear-gradient(90deg, rgba(255,255,255,0.85) 0%, #ffffff 10%, #ffffff 92%, rgba(255,255,255,0.98) 100%);
-  border-top: 2px solid #38d399;
-  border-bottom: 2px solid #ffd23f;
-  box-shadow: 0 -4px 16px #38d399, 0 4px 16px #ffd23f, 0 0 28px rgba(255, 210, 63, 0.8);
-  animation: enemySlashTlToBr calc(var(--sword-ms, 650ms) * 1.92) ease-in-out forwards;
+  height: 20px;
+  background: linear-gradient(180deg,
+    rgba(16, 185, 129, 0) 0%,
+    rgba(56, 211, 153, 0.96) 18%,
+    #ffffff 38%,
+    #ffffff 62%,
+    rgba(255, 210, 63, 0.96) 82%,
+    rgba(245, 158, 11, 0) 100%
+  );
+  filter: drop-shadow(0 -3px 8px #38d399) drop-shadow(0 3px 8px #ffd23f) drop-shadow(0 0 16px rgba(255, 210, 63, 0.8));
+  animation: enemySlashTlToBr 440ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* 建議 ④：雙蓄力疊加時，刀光粗度升級為普通攻擊的 2.5 倍（10px）並強化光暈 */
+/* 建議 ④：雙蓄力疊加時，刀光粗度升級為 2.5 倍（23px）並強化高頻白熱光暈 */
 #enemy-panel.slash-overload-25x .enemy-panel-slash {
-  height: 10px !important;
-  border-top-width: 2.5px !important;
-  border-bottom-width: 2.5px !important;
-  filter: brightness(1.18);
+  height: 23px !important;
+  filter: drop-shadow(0 0 10px #ffffff) drop-shadow(0 0 18px #38d399) drop-shadow(0 0 28px #10b981) brightness(1.22) !important;
 }
 
-/* 建議 ③（僅保留飛散粒子，無十字星）：強化普攻終點／交叉刀光中心的飛散粒子 */
+/* 建議 ③（僅保留飛散粒子，無十字星）：強化普攻終點／交叉刀光中心的飛散能量粒子（提速至 420ms） */
 .slash-impact-sparks-wrap {
   position: absolute;
   inset: 0;
@@ -2272,7 +2386,7 @@ button:not(:disabled):not(.tester-btn) {
   box-shadow: 0 0 8px 2px var(--spark-color, #38d399), 0 0 14px 4px var(--spark-color, #38d399);
   transform: translate(-50%, -50%);
   pointer-events: none;
-  animation: slashSparkBurst 780ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: slashSparkBurst 420ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 @keyframes slashSparkBurst {
   0% {
@@ -4876,12 +4990,15 @@ function spawnSlashImpactSparks(cls) {
   const sx = isCross ? "50%" : "90%";
   const sy = isCross ? "50%" : "82%";
 
-  wrap.innerHTML = vectors.map(([dx, dy], idx) => {
+  const centerBurstHtml = isCross
+    ? `<div class="slash-x-center-burst"></div><div class="slash-x-center-ring"></div>`
+    : "";
+  wrap.innerHTML = centerBurstHtml + vectors.map(([dx, dy], idx) => {
     const c = colors[idx % colors.length];
     return `<div class="slash-impact-spark" style="--sx:${sx};--sy:${sy};--dx:${dx}px;--dy:${dy}px;--spark-color:${c};"></div>`;
   }).join("");
   $ep.appendChild(wrap);
-  setTimeout(() => { wrap.remove(); }, 820);
+  setTimeout(() => { wrap.remove(); }, 460);
 }
 
 async function enemyPanelSlashAnim(variantClass = "slash-hit", extraClasses = []) {
@@ -4899,9 +5016,10 @@ async function enemyPanelSlashAnim(variantClass = "slash-hit", extraClasses = []
   const cls = variantClass || "slash-hit";
   $ep.classList.add(cls, ...extraClasses);
   if (cls !== "slash-hit") {
-    setTimeout(() => { spawnSlashImpactSparks(cls); }, 280);
+    const sparkDelay = (cls === "slash-x-red") ? 95 : 105;
+    setTimeout(() => { spawnSlashImpactSparks(cls); }, sparkDelay);
   }
-  const dur = (cls === "slash-hit") ? SWORD_MS : (SWORD_MS * 2);
+  const dur = (cls === "slash-hit") ? 300 : ((cls === "slash-x-red") ? 480 : 440);
   await sleep(dur);
   $ep.classList.remove(...ALL_SLASH_CLASSES);
 }
@@ -5680,7 +5798,7 @@ async function useCombatSkill(sk) {
     const hpDmg = Math.max(0, baseDmg - baseUsed);
 
     const slashP = enemyPanelSlashAnim("slash-x-red");
-    await sleep(300);
+    await sleep(110);
     enemy.shield -= shdBroken;
     enemy.hp -= hpDmg;
     const enemyLostHp = enemy.hp < enemyHpBefore;
@@ -5717,7 +5835,7 @@ async function useCombatSkill(sk) {
 
     const trueDmg = Math.floor(calcCost * 2.5 + highAtk * 0.6);
     const slashP = enemyPanelSlashAnim("slash-x-red");
-    await sleep(300);
+    await sleep(110);
     enemy.hp -= trueDmg;
     renderStatus();
     const mainLine = `勇者施放【捨身決絕】［消耗 ${actualCost} 點生命｜真實傷害］ ➔ 造成 ${trueDmg} 點真實傷害！（生命 −${trueDmg}）`;
@@ -6316,7 +6434,7 @@ async function heroAttack(atkType) {
   }
 
   const slashP = enemyPanelSlashAnim(slashVariant, slashExtraClasses);
-  await sleep(slashVariant === "slash-hit" ? 150 : 300);
+  await sleep(slashVariant === "slash-hit" ? 85 : 115);
   enemy.shield = heroTarget.shield;
   enemy.hp = heroTarget.hp;
 
