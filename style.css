@@ -11,6 +11,8 @@ body {
   justify-content: center;
 }
 #game {
+  position: relative;
+  z-index: 1;
   width: 100%;
   max-width: 760px;
   height: 100vh;
@@ -2842,4 +2844,169 @@ button:not(:disabled):not(.tester-btn) {
 #text-fade-overlay,
 #battle-intro-overlay {
   cursor: pointer;
+}
+
+
+/* =========================================================
+   第十七版（v17）新增：
+   1. 移除設定 B 頂部與二階段「字印徽章」顯示
+   2. 《boss劇情》第九節：終局 4 階段專屬畫面背景、對話框微光外框與底層低透明度動態暗紋（選項 2A 微調版：第 4 階段無真名水印）
+   ========================================================= */
+.word-seal-badge {
+  display: none !important;
+}
+
+#endgame-bg-fx {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 450ms ease;
+}
+#endgame-bg-fx.active {
+  opacity: 1;
+}
+
+/* ── 階段 ①：第 6 層【文字聖殿】（開戰前探索畫面：黑白聖殿微光＋純白古文字殘影＋銀白微光外框） ── */
+body.endgame-stage-sanctuary {
+  background: radial-gradient(ellipse at 50% 18%, #161c28 0%, #080b11 58%, #000000 100%);
+  transition: background 500ms ease;
+}
+body.endgame-stage-sanctuary #dialogue-stage:not(.glow-red):not(.glow-gold):not(.glow-ice-shield):not(.shatter-ice-shield):not(.glow-yellow-shield):not(.shatter-yellow-shield) {
+  border-color: rgba(226, 232, 240, 0.72);
+  box-shadow: 0 0 18px rgba(226, 232, 240, 0.24), inset 0 0 16px rgba(226, 232, 240, 0.08);
+  background: rgba(6, 9, 14, 0.88);
+}
+.bg-fx-sanctuary-glyph {
+  position: absolute;
+  color: rgba(241, 245, 249, 0.08);
+  font-weight: bold;
+  user-select: none;
+  pointer-events: none;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.06);
+  animation: sanctuaryGlyphFloat linear infinite;
+}
+@keyframes sanctuaryGlyphFloat {
+  0%   { transform: translateY(18vh) scale(0.95); opacity: 0; }
+  20%  { opacity: 0.085; }
+  80%  { opacity: 0.085; }
+  100% { transform: translateY(-22vh) scale(1.05); opacity: 0; }
+}
+
+/* ── 階段 ②：一階段「文字魔王」戰鬥（深褐暗銅色調＋文字鎖鏈暗紋＋暗橙金色微光外框） ── */
+body.endgame-stage-boss1 {
+  background: radial-gradient(ellipse at 50% 24%, #241104 0%, #0e0602 60%, #000000 100%);
+  transition: background 500ms ease;
+}
+body.endgame-stage-boss1 #dialogue-stage:not(.glow-red):not(.glow-gold):not(.glow-ice-shield):not(.shatter-ice-shield):not(.glow-yellow-shield):not(.shatter-yellow-shield) {
+  border-color: rgba(217, 119, 6, 0.76);
+  box-shadow: 0 0 18px rgba(180, 83, 9, 0.30), inset 0 0 15px rgba(180, 83, 9, 0.10);
+  background: rgba(12, 6, 2, 0.88);
+}
+body.endgame-stage-boss1 #battle-drawer {
+  border-bottom-color: rgba(217, 119, 6, 0.65);
+  box-shadow: 0 6px 18px rgba(180, 83, 9, 0.22);
+}
+.bg-fx-boss1-chain {
+  position: absolute;
+  left: -10%;
+  width: 120%;
+  color: rgba(245, 158, 11, 0.075);
+  font-size: 18px;
+  letter-spacing: 6px;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: none;
+  animation: boss1ChainPulse 4.5s ease-in-out infinite;
+}
+@keyframes boss1ChainPulse {
+  0%, 100% { opacity: 0.055; }
+  50%      { opacity: 0.095; }
+}
+
+/* ── 階段 ③：二階段前半血「@$+%^&¥（精神世界・亂碼侵蝕）」（幽暗深紫黑＋紫紅亂碼跳動殘影＋紫紅意識脈動外框） ── */
+body.endgame-stage-boss2-garbled {
+  background: radial-gradient(ellipse at 50% 28%, #21062b 0%, #0c0212 62%, #000000 100%);
+  transition: background 500ms ease;
+}
+body.endgame-stage-boss2-garbled #dialogue-stage:not(.glow-red):not(.glow-gold):not(.glow-ice-shield):not(.shatter-ice-shield):not(.glow-yellow-shield):not(.shatter-yellow-shield) {
+  border-color: rgba(224, 64, 251, 0.78);
+  box-shadow: 0 0 20px rgba(224, 64, 251, 0.32), inset 0 0 16px rgba(224, 64, 251, 0.12);
+  background: rgba(11, 2, 16, 0.88);
+  animation: endgamePurplePulse 3.2s ease-in-out infinite;
+}
+body.endgame-stage-boss2-garbled #battle-drawer {
+  border-bottom-color: rgba(224, 64, 251, 0.68);
+  box-shadow: 0 6px 20px rgba(224, 64, 251, 0.24);
+}
+@keyframes endgamePurplePulse {
+  0%, 100% { box-shadow: 0 0 16px rgba(224, 64, 251, 0.26), inset 0 0 12px rgba(224, 64, 251, 0.10); }
+  50%      { box-shadow: 0 0 24px rgba(224, 64, 251, 0.44), inset 0 0 20px rgba(224, 64, 251, 0.18); }
+}
+.bg-fx-garbled-glitch {
+  position: absolute;
+  color: rgba(224, 64, 251, 0.085);
+  font-family: inherit;
+  font-weight: bold;
+  letter-spacing: 2px;
+  user-select: none;
+  pointer-events: none;
+  animation: garbledBgFlicker 2.4s steps(3, end) infinite;
+}
+@keyframes garbledBgFlicker {
+  0%, 100% { opacity: 0.05; transform: translate(0, 0); }
+  33%      { opacity: 0.095; transform: translate(-2px, 1px); }
+  66%      { opacity: 0.07; transform: translate(2px, -1px); }
+}
+
+/* ── 階段 ④：二階段後半血「文字.沙坦（真名狂暴）」（鮮紅掃描光幕轉場＋暗紅血色深淵＋上升紅燼微粒［無真名水印］＋鮮紅脈動血光外框） ── */
+body.endgame-stage-boss2-rage {
+  background: radial-gradient(ellipse at 50% 28%, #2e040a 0%, #120104 62%, #000000 100%);
+  transition: background 500ms ease;
+}
+body.endgame-stage-boss2-rage #dialogue-stage:not(.glow-red):not(.glow-gold):not(.glow-ice-shield):not(.shatter-ice-shield):not(.glow-yellow-shield):not(.shatter-yellow-shield) {
+  border-color: rgba(255, 23, 68, 0.88);
+  box-shadow: 0 0 24px rgba(255, 23, 68, 0.40), inset 0 0 18px rgba(255, 23, 68, 0.16);
+  background: rgba(15, 2, 4, 0.90);
+  animation: endgameCrimsonPulse 2.2s ease-in-out infinite;
+}
+body.endgame-stage-boss2-rage #battle-drawer {
+  border-bottom-color: rgba(255, 23, 68, 0.78);
+  box-shadow: 0 6px 22px rgba(255, 23, 68, 0.30);
+}
+@keyframes endgameCrimsonPulse {
+  0%, 100% { box-shadow: 0 0 18px rgba(255, 23, 68, 0.32), inset 0 0 14px rgba(255, 23, 68, 0.12); }
+  50%      { box-shadow: 0 0 28px rgba(255, 23, 68, 0.54), inset 0 0 22px rgba(255, 23, 68, 0.22); }
+}
+.bg-fx-rage-ember {
+  position: absolute;
+  bottom: -20px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255, 59, 59, 0.22);
+  box-shadow: 0 0 8px rgba(255, 23, 68, 0.35);
+  pointer-events: none;
+  animation: rageEmberRise linear infinite;
+}
+@keyframes rageEmberRise {
+  0%   { transform: translateY(0) translateX(0) scale(1); opacity: 0; }
+  15%  { opacity: 0.22; }
+  85%  { opacity: 0.16; }
+  100% { transform: translateY(-95vh) translateX(14px) scale(0.4); opacity: 0; }
+}
+.rage-crimson-flash-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 90;
+  background: linear-gradient(180deg, rgba(255, 23, 68, 0) 0%, rgba(255, 23, 68, 0.38) 50%, rgba(255, 23, 68, 0) 100%);
+  animation: rageCrimsonScanFlash 680ms ease-out forwards;
+}
+@keyframes rageCrimsonScanFlash {
+  0%   { opacity: 0; transform: translateY(-30%); }
+  35%  { opacity: 1; transform: translateY(0%); }
+  100% { opacity: 0; transform: translateY(30%); }
 }

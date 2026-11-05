@@ -720,34 +720,130 @@ function countTextEquipPieces(equipObj) {
   return cnt;
 }
 
-// 第 16.1 版新增：《boss劇情》第八節設定 B（選項 4A）— 提取文字裝備名稱最後一個字作為「字印徽章」（如［刺・杖・革・盾］；若奪回血肉或 0 件則返回空字串）
-function getWordSealBadgeText(equipObj) {
-  if (!equipObj || (hero && hero.wordSealCleared)) return "";
-  const slots = ["physWeapon", "magWeapon", "armor", "shield"];
-  const chars = [];
-  slots.forEach(sl => {
-    const it = equipObj[sl];
-    if (it && it.name && !it.isTesterItem && !it.isHeroSword) {
-      const cleanName = String(it.name).trim();
-      if (cleanName.length > 0) {
-        chars.push(cleanName.slice(-1));
-      }
-    }
-  });
-  if (chars.length === 0) return "";
-  return `［${chars.join("・")}］`;
+// 第十七版（v17）更新：依創作者指示刪除設定 B（頂部與二階段面板字印徽章），此函式固定回傳空字串
+function getWordSealBadgeText() {
+  return "";
 }
 
-// 第 16.1 版新增：《boss劇情》第八節設定 A — 取得營地或跨層傳送門之肉身文字化侵蝕描寫
+// 第十七版（v17）升級：《一般劇情》第一節 — 1～5 層營地與跨層傳送門依裝備件數分 3 階段，每階段 4 句隨機抽取（附防連抽重複保護）
+let lastCampErosionLine = "";
+let lastPortalErosionLine = "";
+let floorSkillPageCount = 0;
+
 function getErosionStoryLine(kind) {
   const cnt = countTextEquipPieces(hero ? hero.equip : null);
   const dict = kind === "portal"
     ? (typeof PORTAL_EROSION_TEXTS !== "undefined" ? PORTAL_EROSION_TEXTS : null)
     : (typeof CAMP_EROSION_TEXTS !== "undefined" ? CAMP_EROSION_TEXTS : null);
   if (!dict) return "";
-  if (cnt === 0) return dict.zero || "";
-  if (cnt <= 2) return dict.light || "";
-  return dict.heavy || "";
+  const raw = (cnt === 0) ? dict.zero : (cnt <= 2 ? dict.light : dict.heavy);
+  if (!raw) return "";
+  if (Array.isArray(raw)) {
+    if (raw.length === 0) return "";
+    const lastLine = (kind === "portal") ? lastPortalErosionLine : lastCampErosionLine;
+    const pool = (raw.length > 1 && lastLine) ? raw.filter(s => s !== lastLine) : raw;
+    const picked = randomPick(pool.length > 0 ? pool : raw);
+    if (kind === "portal") lastPortalErosionLine = picked;
+    else lastCampErosionLine = picked;
+    return picked;
+  }
+  return String(raw);
+}
+
+// 第十七版（v17）新增：《boss劇情》第九節 — 終局 4 階段專屬畫面背景與底層低透明度動態暗紋（選項 2A 微調版：第 4 階段無真名水印）
+let currentEndgameBgStage = "";
+
+function ensureEndgameBgFxLayer() {
+  let $layer = document.getElementById("endgame-bg-fx");
+  if (!$layer) {
+    $layer = document.createElement("div");
+    $layer.id = "endgame-bg-fx";
+    $layer.setAttribute("aria-hidden", "true");
+    document.body.insertBefore($layer, document.body.firstChild);
+  }
+  return $layer;
+}
+
+function updateEndgameStageBackground(forceClear = false) {
+  const allStageClasses = [
+    "endgame-stage-sanctuary",
+    "endgame-stage-boss1",
+    "endgame-stage-boss2-garbled",
+    "endgame-stage-boss2-rage",
+  ];
+  let targetStage = "";
+  if (!forceClear && !gameOver) {
+    if (enemy && enemy.isPhase2Boss) {
+      targetStage = (enemy.inRage || enemy.halfHpTriggered)
+        ? "endgame-stage-boss2-rage"
+        : "endgame-stage-boss2-garbled";
+    } else if (enemy && enemy.isBoss) {
+      targetStage = "endgame-stage-boss1";
+    } else if (floor === 6) {
+      targetStage = "endgame-stage-sanctuary";
+    }
+  }
+
+  if (currentEndgameBgStage === targetStage) return;
+  currentEndgameBgStage = targetStage;
+
+  allStageClasses.forEach(cls => document.body.classList.remove(cls));
+  const $layer = ensureEndgameBgFxLayer();
+  if (!targetStage) {
+    $layer.classList.remove("active");
+    $layer.innerHTML = "";
+    return;
+  }
+
+  document.body.classList.add(targetStage);
+  $layer.classList.add("active");
+
+  if (targetStage === "endgame-stage-sanctuary") {
+    const glyphs = ["原", "典", "聖", "殿", "王", "座", "律", "令", "文", "字"];
+    $layer.innerHTML = glyphs.map((ch, idx) => {
+      const left = 8 + (idx * 9) % 84;
+      const top = 12 + (idx * 17) % 72;
+      const size = 22 + (idx % 3) * 8;
+      const dur = 9 + (idx % 4) * 2;
+      const delay = -(idx * 1.3);
+      return `<span class="bg-fx-sanctuary-glyph" style="left:${left}%;top:${top}%;font-size:${size}px;animation-duration:${dur}s;animation-delay:${delay}s;">${ch}</span>`;
+    }).join("");
+  } else if (targetStage === "endgame-stage-boss1") {
+    const chains = [
+      { top: 16, rot: -8, text: "鎖 ═══ 鏈 ═══ 縛 ═══ 誓 ═══ 約 ═══ 枷 ═══ 錮 ═══ 鎖 ═══ 鏈" },
+      { top: 48, rot: 6,  text: "枷 ═══ 錮 ═══ 鎖 ═══ 鏈 ═══ 縛 ═══ 誓 ═══ 約 ═══ 枷 ═══ 錮" },
+      { top: 78, rot: -5, text: "誓 ═══ 約 ═══ 鎖 ═══ 鏈 ═══ 枷 ═══ 錮 ═══ 縛 ═══ 誓 ═══ 約" },
+    ];
+    $layer.innerHTML = chains.map((c, idx) =>
+      `<div class="bg-fx-boss1-chain" style="top:${c.top}%;transform:rotate(${c.rot}deg);animation-delay:${idx * 1.2}s;">${c.text}</div>`
+    ).join("");
+  } else if (targetStage === "endgame-stage-boss2-garbled") {
+    const snippets = ["@$+%^&¥", "#?!@$%", "&*¥@#$", "%^&¥?!", "@#$%*!", "¥&^%$@"];
+    $layer.innerHTML = snippets.map((str, idx) => {
+      const left = 10 + (idx * 15) % 78;
+      const top = 14 + (idx * 16) % 72;
+      const size = 18 + (idx % 3) * 5;
+      return `<span class="bg-fx-garbled-glitch" style="left:${left}%;top:${top}%;font-size:${size}px;animation-delay:${idx * 0.35}s;">${str}</span>`;
+    }).join("");
+  } else if (targetStage === "endgame-stage-boss2-rage") {
+    // 第 4 階段：暗紅血色深淵 ＋ 上升紅燼微粒（依創作者指示：底層不浮現「文字.沙坦」真名水印）
+    const embers = Array.from({ length: 14 }, (_, idx) => {
+      const left = 6 + (idx * 7) % 88;
+      const dur = 5.5 + (idx % 4) * 1.4;
+      const delay = -(idx * 0.6);
+      return `<span class="bg-fx-rage-ember" style="left:${left}%;animation-duration:${dur}s;animation-delay:${delay}s;"></span>`;
+    });
+    $layer.innerHTML = embers.join("");
+  }
+}
+
+function triggerRageCrimsonFlash() {
+  const $flash = document.createElement("div");
+  $flash.className = "rage-crimson-flash-overlay";
+  document.body.appendChild($flash);
+  setTimeout(() => {
+    if ($flash.parentNode) $flash.parentNode.removeChild($flash);
+  }, 720);
 }
 
 function getFloorInfo(fl) {
@@ -862,6 +958,7 @@ function jumpToTesterFloor(targetFloor, targetRound = 1) {
 
   floor = targetFloor;
   round = targetRound;
+  floorSkillPageCount = 0;
   floorDeck = buildFloorDeck(floor);
   hero.maxHp = HERO_BASE.hp + (floor - 1) * FLOOR_HP_BONUS;
   hero.hp = hero.maxHp;
@@ -956,6 +1053,7 @@ function setChoices(list) {
 
 // 渲染第 1 部分（頂部勇者資訊欄：左上角附「測試者」按鈕；第 3 行順序改為「物攻｜物防｜魔攻｜魔防」）與第 2 部分（敵人對戰卡）
 function renderStatus() {
+  updateEndgameStageBackground();
   const s = calcStats(HERO_BASE, hero.equip, true);
   const curShield = enemy ? hero.shield : s.shield;
   if (enemy && curShield > (hero.maxBattleShield || 0)) {
@@ -1786,7 +1884,12 @@ async function playStartText() {
   $s.classList.add("show");
   $s.getAnimations().forEach(a => a.cancel());
   $s.style.backgroundColor = "rgba(0,0,0,1)";
-  await storyTextAnim(START_TEXT);
+  const prologueLines = (typeof START_PROLOGUE_TEXTS !== "undefined" && Array.isArray(START_PROLOGUE_TEXTS) && START_PROLOGUE_TEXTS.length > 0)
+    ? START_PROLOGUE_TEXTS
+    : [START_TEXT];
+  for (const line of prologueLines) {
+    await storyTextAnim(line);
+  }
   await storyBg(1, 0, 500);
   $s.classList.remove("show");
   $s.getAnimations().forEach(a => a.cancel());
@@ -2073,6 +2176,9 @@ function newGame(selectedMode) {
   floor = 1;
   round = 1;
   turn = 1;
+  floorSkillPageCount = 0;
+  lastCampErosionLine = "";
+  lastPortalErosionLine = "";
   enemy = null;
   gameOver = false;
   floorDeck = buildFloorDeck(floor);
@@ -2082,7 +2188,13 @@ function newGame(selectedMode) {
     ? "【撲克模式】"
     : "【骰子模式】";
   log(`【勇者與魔王】${modeTitle}`, "big");
-  log("你踏入被文字魔王侵蝕的領域。每層共有 6 個回合，擊敗怪物穿戴文字裝備，邁向最深處的文字聖殿。");
+  if (typeof START_PROLOGUE_TEXTS !== "undefined" && Array.isArray(START_PROLOGUE_TEXTS) && START_PROLOGUE_TEXTS.length > 1) {
+    for (let i = 0; i < START_PROLOGUE_TEXTS.length - 1; i++) {
+      log(START_PROLOGUE_TEXTS[i], i === START_PROLOGUE_TEXTS.length - 2 ? "text-curse" : "");
+    }
+  } else {
+    log("你踏入被文字魔王侵蝕的領域。每層共有 6 個回合，擊敗怪物穿戴文字裝備，邁向最深處的文字聖殿。");
+  }
   const fInfo = getFloorInfo(floor);
   log(`── 進入第 ${floor} 層【${fInfo.name}】：${fInfo.desc}`, "big");
   presentRound();
@@ -2237,10 +2349,17 @@ async function triggerSkillCardEvent() {
   const unownedPool = SKILLS.filter(s => !ownedIds.has(s.id));
   const candidates = drawFromDeck(unownedPool, SKILL_DRAW_COUNT);
 
-  // 1. 依當前樓層播放前代勇者字跡眉批（黑幕文字消失效果，可點擊跳過）
-  const loreLine = (typeof SKILL_PAGE_LORE_BY_FLOOR !== "undefined" && SKILL_PAGE_LORE_BY_FLOOR[floor])
+  // 1. 依當前樓層與本層第幾次抽到殘頁播放前代勇者字跡眉批（選項 2A：同層第 1 次與第 2 次顯示不同字跡，可點擊跳過）
+  const rawFloorLore = (typeof SKILL_PAGE_LORE_BY_FLOOR !== "undefined" && SKILL_PAGE_LORE_BY_FLOOR[floor])
     ? SKILL_PAGE_LORE_BY_FLOOR[floor]
     : "";
+  let loreLine = "";
+  if (Array.isArray(rawFloorLore)) {
+    loreLine = rawFloorLore[Math.min(floorSkillPageCount, rawFloorLore.length - 1)] || "";
+  } else {
+    loreLine = rawFloorLore || "";
+  }
+  floorSkillPageCount++;
   if (loreLine) {
     log(loreLine, "text-curse");
     await playStorySequence([loreLine]);
@@ -2416,6 +2535,7 @@ async function enterNextFloorPortal() {
 
   floor++;
   round = 1;
+  floorSkillPageCount = 0;
   floorDeck = buildFloorDeck(floor);
   hero.maxHp += FLOOR_HP_BONUS;
   const beforeHp = hero.hp;
@@ -3040,6 +3160,7 @@ async function startBattle(template) {
       name: template.name,
       type: template.type || "phys",
       typeLabel: template.typeLabel || "怪物",
+      introDesc: template.introDesc || "", 
       isBoss: !!template.isBoss,
       isPhase2Boss: false,
       hp: template.hp,
@@ -3096,6 +3217,9 @@ async function startBattle(template) {
   await openBattleDrawerAnim(enemy.name);
 
   log(`對手是${enemy.name}！`, "big");
+  if (!enemy.isBoss && !enemy.isPhase2Boss && enemy.introDesc) {
+    log(enemy.introDesc, "text-curse");
+  }
 
   if (enemy.isBoss) {
     const introLine = typeof BOSS_INTRO_TEXT !== "undefined"
@@ -3621,7 +3745,9 @@ async function finishHeroTurnAndEnemyAct(didAttackAction) {
   const halfLockVal = (typeof PHASE2_BOSS_HALF_HP_LOCK !== "undefined") ? PHASE2_BOSS_HALF_HP_LOCK : Math.floor(enemy.maxHp * PHASE2_BOSS_RAGE_HP_RATIO);
   if (enemy.isPhase2Boss && !enemy.halfHpTriggered && enemy.hp <= halfLockVal) {
     enemy.halfHpTriggered = true;
+    enemy.firstAttackDone = true;
     await playGarbledCoverDropAnim();
+    triggerRageCrimsonFlash();
     enemy.name = enemy.trueName || PHASE2_BOSS_TRUE_NAME;
     enemy.typeLabel = "真魔王";
     enemy.inRage = true;
@@ -3926,7 +4052,9 @@ async function enemyAttack() {
     const lockHpCheck = (typeof PHASE2_BOSS_HALF_HP_LOCK !== "undefined") ? PHASE2_BOSS_HALF_HP_LOCK : 67;
     if (enemy && enemy.isPhase2Boss && !enemy.halfHpTriggered && enemy.hp <= lockHpCheck) {
       enemy.halfHpTriggered = true;
+      enemy.firstAttackDone = true;
       await playGarbledCoverDropAnim();
+      triggerRageCrimsonFlash();
       enemy.name = enemy.trueName || PHASE2_BOSS_TRUE_NAME;
       enemy.typeLabel = "真魔王";
       enemy.inRage = true;
@@ -4110,12 +4238,20 @@ function loseGame() {
     playDefeatText(p1DefeatLines);
     return;
   }
-  log(`勇者倒下了……被${killerName}擊敗，意識逐漸被冰冷的文字吞噬。`, "big");
+  const eqCount = countTextEquipPieces(hero ? hero.equip : null);
+  const normalDefeatLines = (eqCount === 0 && typeof NORMAL_DEFEAT_UNARMED_TEXTS !== "undefined" && NORMAL_DEFEAT_UNARMED_TEXTS.length > 0)
+    ? NORMAL_DEFEAT_UNARMED_TEXTS
+    : ((typeof NORMAL_DEFEAT_EQUIPPED_TEXTS !== "undefined" && NORMAL_DEFEAT_EQUIPPED_TEXTS.length > 0)
+        ? NORMAL_DEFEAT_EQUIPPED_TEXTS
+        : [`勇者倒下了……被${killerName}擊敗，意識逐漸被冰冷的文字吞噬。`]);
+  for (const line of normalDefeatLines) {
+    log(line, "text-curse");
+  }
   log(`【遊戲結束】止步於第 ${floor} 層第 ${round} 回合。`, "big");
   enemy = null;
   renderStatus();
   setChoices([]);
-  playDefeatText([DEFEAT_TEXT]);
+  playDefeatText(normalDefeatLines);
 }
 
 /* =========================================================
@@ -4147,6 +4283,9 @@ document.getElementById("intro-box").innerHTML = colorize(
 );
 
 function showScreen(target, beforeShow) {
+  if (target !== $game) {
+    updateEndgameStageBackground(true);
+  }
   if (transitioning) return;
   transitioning = true;
   $fade.classList.add("on");

@@ -52,6 +52,7 @@ const FLOOR_MONSTERS = {
     {
       name: "墨染史萊姆", type: "phys", typeLabel: "物理怪", hp: 20, weight: 40,
       baseStats: { physAtk: 0, magAtk: 0, physDef: 0, magDef: 1 },
+      introDesc: "由林間黑墨凝聚而成的軟泥魔物，半透明的軀體內翻湧著被吞噬的草木殘字……",
       items: [
         { slot: "physWeapon", name: "墨痕鈍刺", physAtk: 3, textDesc: "右手掌被黏稠的黑墨浸染，化作了「刺」字...力量湧現。" },
         { slot: "armor", name: "凝墨外皮", physDef: 6, magDef: 1, textDesc: "胸口肌膚浮現墨色硬甲，化為「革」字...防護提升。" },
@@ -60,6 +61,7 @@ const FLOOR_MONSTERS = {
     {
       name: "漂浮符文妖", type: "mag", typeLabel: "魔法怪", hp: 15, weight: 40,
       baseStats: { physAtk: 0, magAtk: 0, physDef: 1, magDef: 0 },
+      introDesc: "原本是林間飛舞的螢火與微風，被詛咒改寫後化作懸浮半空、不斷低語的幽藍符文……",
       items: [
         { slot: "magWeapon", name: "散佚字元杖", magAtk: 4, textDesc: "右臂蔓延出幽藍的筆畫，握柄處凝成了「杖」字...魔力湧動。" },
         { slot: "armor", name: "虛質殘頁", physDef: 0, magDef: 7, textDesc: "肩頭飄落半透明書頁，皮膚化作了「紋」字...魔抗增強。" },
@@ -69,6 +71,7 @@ const FLOOR_MONSTERS = {
     {
       name: "墨痕聚合體", type: "chaos", typeLabel: "渾沌怪", hp: 26, weight: 20,
       baseStats: { physAtk: 0, magAtk: 0, physDef: 1, magDef: 1 },
+      introDesc: "無數散落的動物與村民殘字強行扭結而成的怪異肉塊，刀刃與咒文在體表交錯暴走……",
       items: [
         { slot: "physWeapon", name: "錯亂墨骨刃", physAtk: 5, textDesc: "右手骨骼劇痛並扭曲，凝結成一把墨色「刃」字骨刃。" },
         { slot: "magWeapon", name: "錯亂符文刃", magAtk: 5, textDesc: "左臂被流動的藍光符碼覆蓋，化作散發微光的「咒」字短刃。" },
@@ -81,6 +84,7 @@ const FLOOR_MONSTERS = {
     {
       name: "蝕刻穴居人", type: "phys", typeLabel: "物理怪", hp: 29, weight: 40,
       baseStats: { physAtk: 1, magAtk: 0, physDef: 0, magDef: 1 },
+      introDesc: "曾試圖躲入石窟避難的採礦村民，全身骨骼已被尖銳的部首刺穿並同化為冰冷的石刻魁儡……",
       items: [
         { slot: "physWeapon", name: "粗糙岩鑿斧", physAtk: 6, textDesc: "小臂肌肉骨化為粗獷的「斧」字...揮擊沉重有力。" },
         { slot: "armor", name: "石刻重甲", physDef: 10, magDef: 2, textDesc: "軀幹石化剝落，背後烙印著厚重的「磐」字...物防大增。" },
@@ -90,6 +94,7 @@ const FLOOR_MONSTERS = {
     {
       name: "洞窟秘術咒靈", type: "mag", typeLabel: "魔法怪", hp: 24, weight: 40,
       baseStats: { physAtk: 0, magAtk: 1, physDef: 1, magDef: 0 },
+      introDesc: "徘徊在陰暗岩壁間的怨念字靈，指尖流瀉著能將活人血肉腐蝕成墨水的暗色咒文……",
       items: [
         { slot: "magWeapon", name: "石窟咒印杖", magAtk: 8, textDesc: "指尖流瀉暗色咒文，化作閃耀的「術」字...魔能澎湃。" },
         { slot: "armor", name: "低語法袍", physDef: 2, magDef: 11, textDesc: "輕柔的絮語纏繞胸膛，皮膚化為幽暗的「霧」字抵禦法術。" },
@@ -99,6 +104,7 @@ const FLOOR_MONSTERS = {
     {
       name: "裂隙蝕骨獸", type: "chaos", typeLabel: "渾沌怪", hp: 37, weight: 20,
       baseStats: { physAtk: 1, magAtk: 1, physDef: 1, magDef: 1 },
+      introDesc: "從石窟地底裂隙爬出的四足魔獸，外翻的肋骨與幽紫爪痕間不斷迸發出錯亂的字元火花……",
       items: [
         { slot: "physWeapon", name: "裂隙碎骨爪", physAtk: 8, textDesc: "右手五指化作泛著骨白的「爪」字...撕裂皮肉。" },
         { slot: "magWeapon", name: "蝕隙咒魂爪", magAtk: 8, textDesc: "左手纏繞著幽紫色的文字「痕」...魔力破壞力劇增。" },
@@ -111,6 +117,7 @@ const FLOOR_MONSTERS = {
     {
       name: "亂碼骸骨死士", type: "phys", typeLabel: "物理怪", hp: 40, weight: 40,
       baseStats: { physAtk: 1, magAtk: 0, physDef: 0, magDef: 2 },
+      introDesc: "長眠於古墓中的歷代守衛遺骸，被錯亂的墓誌銘與金屬字元強行拼湊甦醒，只剩下揮劍的本能……",
       items: [
         { slot: "physWeapon", name: "鏽蝕斷碼劍", physAtk: 10, textDesc: "手骨徹底金屬文字化，凝結出殘破的「劍」字鋒刃。" },
         { slot: "armor", name: "骨片鏈甲", physDef: 15, magDef: 4, textDesc: "鏈條與骨片穿透皮肉，在胸腹拼湊出冰冷的「鐵」字。" },
@@ -120,6 +127,7 @@ const FLOOR_MONSTERS = {
     {
       name: "哀號字節幽魂", type: "mag", typeLabel: "魔法怪", hp: 33, weight: 40,
       baseStats: { physAtk: 0, magAtk: 1, physDef: 2, magDef: 0 },
+      introDesc: "亡者臨終前未能說出口的遺言與悲鳴，在陵墓上空匯聚成發出刺耳噪點的怨靈……",
       items: [
         { slot: "magWeapon", name: "噪點引魂幡", magAtk: 13, textDesc: "耳旁響起淒厲噪音，掌心文字炸裂為「魄」字魔引。" },
         { slot: "armor", name: "虛無靈衣", physDef: 4, magDef: 16, textDesc: "身體漸趨透明虛化，軀幹化為空洞的「虛」字避開魔法。" },
@@ -129,6 +137,7 @@ const FLOOR_MONSTERS = {
     {
       name: "亂碼編譯魔像", type: "chaos", typeLabel: "渾沌怪", hp: 53, weight: 20,
       baseStats: { physAtk: 1, magAtk: 1, physDef: 2, magDef: 2 },
+      introDesc: "由整座陵墓的破碎墓碑與錯誤代碼重構而成的巨型魔像，每一次踏步都伴隨著沉重的字節轟鳴……",
       items: [
         { slot: "physWeapon", name: "編譯破壞槌", physAtk: 12, textDesc: "右臂化作沉重的符碼巨槌，砸下時顯現「碎」字威力。" },
         { slot: "magWeapon", name: "重構解碼杖", magAtk: 12, textDesc: "左腕重組為閃爍錯誤代碼的法杖，激盪「析」字魔力。" },
@@ -141,6 +150,7 @@ const FLOOR_MONSTERS = {
     {
       name: "淵面行刑者", type: "phys", typeLabel: "物理怪", hp: 53, weight: 40,
       baseStats: { physAtk: 2, magAtk: 0, physDef: 0, magDef: 2 },
+      introDesc: "駐守在深淵斷崖的漆黑處刑官，手中的「斬」字巨斧曾無情斬斷無數反抗者的血肉與記憶……",
       items: [
         { slot: "physWeapon", name: "斷頭重鋼斧", physAtk: 15, textDesc: "肌肉撕裂並重組，化為充斥殺戮血光的「斬」字巨刃。" },
         { slot: "armor", name: "淵黑重鎧", physDef: 22, magDef: 6, textDesc: "深淵重鐵吸附於骨骼，化作沉重而不可撼動的「固」字。" },
@@ -150,6 +160,7 @@ const FLOOR_MONSTERS = {
     {
       name: "斷章星象術士", type: "mag", typeLabel: "魔法怪", hp: 44, weight: 40,
       baseStats: { physAtk: 0, magAtk: 2, physDef: 2, magDef: 0 },
+      introDesc: "因窺探世界原典而被文字徹底吞噬的古代學者，雙眼已被旋轉的星辰字元取代……",
       items: [
         { slot: "magWeapon", name: "虛空星象儀", magAtk: 18, textDesc: "星辰軌跡在眼中轉動，指引出無窮星輝的「星」字法器。" },
         { slot: "armor", name: "星痕深淵袍", physDef: 6, magDef: 23, textDesc: "法袍如同深空夜幕披身，體內鐫刻「曜」字吞噬法能。" },
@@ -159,6 +170,7 @@ const FLOOR_MONSTERS = {
     {
       name: "虛空斷章巨靈", type: "chaos", typeLabel: "渾沌怪", hp: 72, weight: 20,
       baseStats: { physAtk: 2, magAtk: 2, physDef: 2, magDef: 2 },
+      introDesc: "在失去上下文的深淵裂谷中誕生的空間巨靈，周身環繞著能將萬物碾碎成字元的引力漩渦……",
       items: [
         { slot: "physWeapon", name: "湮滅碎裂核", physAtk: 17, textDesc: "右掌中文字崩塌為引力核心，爆發「坍」字物理重擊。" },
         { slot: "magWeapon", name: "虛無噬靈核", magAtk: 17, textDesc: "左手浮現深空文字漩渦，釋放撕裂維度的「噬」字魔能。" },
@@ -171,6 +183,7 @@ const FLOOR_MONSTERS = {
     {
       name: "原典禁衛巨兵", type: "phys", typeLabel: "物理怪", hp: 68, weight: 40,
       baseStats: { physAtk: 2, magAtk: 0, physDef: 0, magDef: 3 },
+      introDesc: "拱衛著聖殿大門的純白重甲巨兵，全身由最古老、最嚴苛的原典律令文字鍛造而成……",
       items: [
         { slot: "physWeapon", name: "王座金敕戟", physAtk: 21, textDesc: "神聖金光貫通右臂，血肉完形為神聖威嚴的「敕」字金戟。" },
         { slot: "armor", name: "原典神聖板甲", physDef: 30, magDef: 8, textDesc: "宛如聖殿梁柱般的純白文字化作胸甲，「城」字固若金湯。" },
@@ -180,6 +193,7 @@ const FLOOR_MONSTERS = {
     {
       name: "王座吟唱主教", type: "mag", typeLabel: "魔法怪", hp: 57, weight: 40,
       baseStats: { physAtk: 0, magAtk: 2, physDef: 3, magDef: 0 },
+      introDesc: "狂熱效忠於原典王座的高階祭司，口中不間斷地頌唱著抹殺血肉、讚美文字同化的神聖經文……",
       items: [
         { slot: "magWeapon", name: "終焉聖典", magAtk: 25, textDesc: "原典之言在心頭響起，右手捧起散發耀眼光芒的「典」字之書。" },
         { slot: "armor", name: "審判聖輝袍", physDef: 8, magDef: 31, textDesc: "聖潔經文流淌周身，皮膚化作「聖」字，一切魔法皆化泡影。" },
@@ -189,6 +203,7 @@ const FLOOR_MONSTERS = {
     {
       name: "文字同化核心", type: "chaos", typeLabel: "渾沌怪", hp: 94, weight: 20,
       baseStats: { physAtk: 2, magAtk: 2, physDef: 3, magDef: 3 },
+      introDesc: "漂浮在聖殿門前的純粹文字結晶體，散發著將世間一切血肉萬象強制改寫為文字的終極威壓……",
       items: [
         { slot: "physWeapon", name: "原典創生之刃", physAtk: 23, textDesc: "右臂文字凝聚為萬物實體，化為裁斷因果的「創」字巨劍。" },
         { slot: "magWeapon", name: "原典終焉法杖", magAtk: 23, textDesc: "左手文字昇華為能量狂潮，點燃終結萬象的「滅」字法杖。" },
