@@ -432,6 +432,14 @@ async function playReflectWaveAnim(onTouchEnemyCallback) {
 function getHeroActiveBuffItems() {
   if (!enemy || !hero) return [];
   const items = [];
+  if (hero.trueNameStunActive && enemy && enemy.isPhase2Boss) {
+    items.push({
+      key: "true_name_stun_debuff",
+      label: "［🌀精神污染：30%眩暈］",
+      category: "curse",
+      color: "#e040fb",
+    });
+  }
   if (hero.battleStatBonus && hero.battleStatBonus > 0) {
     items.push({
       key: "perm_break",
@@ -700,7 +708,52 @@ function isCompletelyUnarmed() {
   return !hero.equip.physWeapon && !hero.equip.magWeapon && !hero.equip.armor && !hero.equip.shield;
 }
 
+// 第 16.1 版新增：統計勇者當前穿戴之文字裝備件數（0～4 件，排除測試者無敵套裝與非文字飾品）
+function countTextEquipPieces(equipObj) {
+  if (!equipObj) return 0;
+  const slots = ["physWeapon", "magWeapon", "armor", "shield"];
+  let cnt = 0;
+  slots.forEach(sl => {
+    const it = equipObj[sl];
+    if (it && !it.isTesterItem && !it.isHeroSword) cnt++;
+  });
+  return cnt;
+}
+
+// 第 16.1 版新增：《boss劇情》第八節設定 B（選項 4A）— 提取文字裝備名稱最後一個字作為「字印徽章」（如［刺・杖・革・盾］；若奪回血肉或 0 件則返回空字串）
+function getWordSealBadgeText(equipObj) {
+  if (!equipObj || (hero && hero.wordSealCleared)) return "";
+  const slots = ["physWeapon", "magWeapon", "armor", "shield"];
+  const chars = [];
+  slots.forEach(sl => {
+    const it = equipObj[sl];
+    if (it && it.name && !it.isTesterItem && !it.isHeroSword) {
+      const cleanName = String(it.name).trim();
+      if (cleanName.length > 0) {
+        chars.push(cleanName.slice(-1));
+      }
+    }
+  });
+  if (chars.length === 0) return "";
+  return `［${chars.join("・")}］`;
+}
+
+// 第 16.1 版新增：《boss劇情》第八節設定 A — 取得營地或跨層傳送門之肉身文字化侵蝕描寫
+function getErosionStoryLine(kind) {
+  const cnt = countTextEquipPieces(hero ? hero.equip : null);
+  const dict = kind === "portal"
+    ? (typeof PORTAL_EROSION_TEXTS !== "undefined" ? PORTAL_EROSION_TEXTS : null)
+    : (typeof CAMP_EROSION_TEXTS !== "undefined" ? CAMP_EROSION_TEXTS : null);
+  if (!dict) return "";
+  if (cnt === 0) return dict.zero || "";
+  if (cnt <= 2) return dict.light || "";
+  return dict.heavy || "";
+}
+
 function getFloorInfo(fl) {
+  if (typeof BOSS_SANCTUARY_FLOOR !== "undefined" && fl === BOSS_SANCTUARY_FLOOR.floor) {
+    return BOSS_SANCTUARY_FLOOR;
+  }
   return FLOORS.find(f => f.floor === fl) || { floor: fl, name: `第 ${fl} 層`, desc: "" };
 }
 
@@ -838,7 +891,7 @@ function openTesterModal() {
 
   const btnBoss = document.createElement("button");
   btnBoss.type = "button";
-  btnBoss.textContent = "直達第 5 層【文字魔王戰】（第 6 回合）";
+  btnBoss.textContent = "直達第 5 層第 6 回合【踏入第 6 層文字聖殿／魔王戰】";
   btnBoss.onclick = () => jumpToTesterFloor(5, ROUNDS_PER_FLOOR);
   $testerFloorList.appendChild(btnBoss);
 
@@ -926,7 +979,9 @@ function renderStatus() {
   const modeTag = gameMode === "poker" ? "［撲克模式］" : "［骰子模式］";
   const stageTitle = (enemy && enemy.isPhase2Boss)
     ? `勇者${modeTag}　精神世界【心魔決戰】`
-    : `勇者${modeTag}　第 ${floor} 層【${fInfo.name}】　第 ${round} / ${ROUNDS_PER_FLOOR} 回合`;
+    : (floor === 6)
+      ? `勇者${modeTag}　第 6 層【${fInfo.name}】`
+      : `勇者${modeTag}　第 ${floor} 層【${fInfo.name}】　第 ${round} / ${ROUNDS_PER_FLOOR} 回合`;
 
   const skillCount = (hero && hero.skills) ? hero.skills.length : 0;
   const skillBtnLabel = skillExpanded ? `技能(${skillCount}/2) ▲` : `技能(${skillCount}/2) ▼`;
@@ -944,6 +999,7 @@ function renderStatus() {
           <div class="hero-buff-tag" id="hero-panel-tag"></div>
         </div>
         <div class="header-actions">
+          <span class="word-seal-badge hidden" id="hero-word-seal"></span>
           <button type="button" class="mini-btn" id="btn-toggle-skill"></button>
           <button type="button" class="mini-btn" id="btn-toggle-equip"></button>
           <button type="button" class="mini-btn" id="btn-open-history">歷史對話</button>
@@ -996,6 +1052,18 @@ function renderStatus() {
 
   const $title = document.getElementById("hero-panel-title");
   if ($title) $title.innerHTML = colorize(escapeHtml(stageTitle));
+
+  const $heroSeal = document.getElementById("hero-word-seal");
+  if ($heroSeal) {
+    const sealText = getWordSealBadgeText(hero ? hero.equip : null);
+    if (sealText) {
+      $heroSeal.textContent = sealText;
+      $heroSeal.classList.remove("hidden");
+    } else {
+      $heroSeal.textContent = "";
+      $heroSeal.classList.add("hidden");
+    }
+  }
 
   const $btnSkill = document.getElementById("btn-toggle-skill");
   if ($btnSkill) {
@@ -1139,7 +1207,7 @@ function renderStatus() {
     } else if (enemy.isPhase2Boss) {
       weakNote = enemy.inRage
         ? `［真名狂暴：攻擊×${PHASE2_BOSS_RAGE_MULT}］`
-        : `［亂碼侵蝕：攻擊×${PHASE2_BOSS_INIT_MULT}／吸血+${PHASE2_BOSS_LIFESTEAL}］`;
+        : `［亂碼侵蝕：攻擊×${PHASE2_BOSS_INIT_MULT}｜亂碼障壁］`;
     }
     if (enemy.burnTurns && enemy.burnTurns > 0) {
       weakNote += (weakNote ? " " : "") + `［🔥燃燒：剩 ${enemy.burnTurns} 回合］`;
@@ -1171,14 +1239,18 @@ function renderStatus() {
         ${buildShieldFxLayerHtml(false)}
         <div class="panel-row-top">
           <div class="panel-title" id="enemy-panel-title"></div>
-          <div class="enemy-tag" id="enemy-panel-tag"></div>
+          <div class="header-actions">
+            <span class="word-seal-badge hidden" id="enemy-word-seal"></span>
+            <div class="enemy-tag" id="enemy-panel-tag"></div>
+          </div>
         </div>
         <div class="bars-row">
           <div class="stat-bar-group">
             <span class="stat-label">生命</span>
-            <div class="bar-track">
+            <div class="bar-track" id="enemy-hp-track">
               <div class="bar-ghost hp-enemy-ghost" style="width:${eHpPct}%"></div>
               <div class="bar-fill hp-enemy" style="width:${eHpPct}%"></div>
+              <div class="garbled-hp-cover hidden" id="enemy-garbled-cover" aria-hidden="true">@$+%^&amp;¥#?!@$+%^&amp;¥</div>
             </div>
             <span class="stat-num" id="enemy-hp-num"></span>
           </div>
@@ -1198,6 +1270,22 @@ function renderStatus() {
     if ($eTitle) $eTitle.innerHTML = `敵人：${colorize(escapeHtml(enemy.name))}`;
     const $eTag = document.getElementById("enemy-panel-tag");
     if ($eTag) $eTag.textContent = weakNote;
+    const $eSeal = document.getElementById("enemy-word-seal");
+    if ($eSeal) {
+      const eSealText = enemy.isPhase2Boss ? getWordSealBadgeText(hero ? hero.equip : null) : "";
+      if (eSealText) {
+        $eSeal.textContent = eSealText;
+        $eSeal.classList.remove("hidden");
+      } else {
+        $eSeal.textContent = "";
+        $eSeal.classList.add("hidden");
+      }
+    }
+    const $garbledCover = document.getElementById("enemy-garbled-cover");
+    if ($garbledCover) {
+      const showGarbled = !!(enemy.isPhase2Boss && !enemy.halfHpTriggered);
+      $garbledCover.classList.toggle("hidden", !showGarbled);
+    }
 
     $eHpFill = $enemyPanel.querySelector(".bar-fill.hp-enemy");
     const $eHpGhost = $enemyPanel.querySelector(".bar-ghost.hp-enemy-ghost");
@@ -1228,6 +1316,9 @@ function renderStatus() {
     } else if ($eShFill) {
       $eShFill.style.width = eShPct + "%";
     }
+    if ($eShFill) {
+      $eShFill.classList.toggle("dark-origin-shield", !!(enemy.isPhase2Boss && enemy.inRage));
+    }
 
     const $eHpNum = document.getElementById("enemy-hp-num");
     if ($eHpNum) $eHpNum.textContent = `${eHpCur} / ${enemy.maxHp}`;
@@ -1250,7 +1341,37 @@ function renderStatus() {
   }
 }
 
-/* ===== 第九版新增：裝備紫色文字縮小消失動畫（2.5 秒無二次閃退）與全螢幕文字轉場 ===== */
+/* ===== 第 16.1 版升級：通用「可點擊／按鍵跳過」等待工具（讓全遊戲所有文字動畫皆支援點擊跳過） ===== */
+function waitSkippableMs(durationMs) {
+  return new Promise(resolve => {
+    let done = false;
+    let timer = null;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      if (timer) clearTimeout(timer);
+      window.removeEventListener("pointerdown", onSkip, true);
+      window.removeEventListener("keydown", onSkip, true);
+      resolve(true);
+    };
+    const onSkip = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      finish();
+    };
+    window.addEventListener("pointerdown", onSkip, { capture: true, once: true });
+    window.addEventListener("keydown", onSkip, { capture: true, once: true });
+    timer = setTimeout(() => {
+      if (done) return;
+      done = true;
+      window.removeEventListener("pointerdown", onSkip, true);
+      window.removeEventListener("keydown", onSkip, true);
+      resolve(false);
+    }, durationMs);
+  });
+}
+
+/* ===== 第九版／第 16.1 版更新：裝備紫色文字縮小消失動畫（支援點擊任意處跳過）與全螢幕文字轉場（支援點擊任意處跳過） ===== */
 async function playEquipTextAnim(char) {
   const $ov = document.getElementById("equip-anim-overlay");
   if (!$ov) return;
@@ -1259,10 +1380,11 @@ async function playEquipTextAnim(char) {
   $ov.classList.remove("hidden", "animating");
   void $ov.offsetWidth;
   $ov.classList.add("show", "animating");
-  await sleep(2500);
-  // 先僅移除 show 讓背景平滑淡出，保留 animating 讓文字維持在縮小至 0 的終點狀態，絕不二次閃現
+  const skipped = await waitSkippableMs(2500);
   $ov.classList.remove("show");
-  await sleep(300);
+  if (!skipped) {
+    await sleep(300);
+  }
   $ov.classList.remove("animating");
   $ov.classList.add("hidden");
 }
@@ -1280,9 +1402,11 @@ async function playFadeOutTextScreen(text, color = "#ffd23f", withScanline = fal
   if (withScanline) $ov.classList.add("with-scanline");
   void $ov.offsetWidth;
   $ov.classList.add("show", "animating");
-  await sleep(durationMs);
+  const skipped = await waitSkippableMs(durationMs);
   $ov.classList.remove("show");
-  await sleep(300);
+  if (!skipped) {
+    await sleep(300);
+  }
   $ov.classList.remove("animating", "with-scanline");
   $ov.classList.add("hidden");
 }
@@ -1313,7 +1437,7 @@ async function openBattleDrawerAnim(enemyName) {
     $battleIntroOverlay.classList.remove("active");
     void $battleIntroOverlay.offsetWidth;
     $battleIntroOverlay.classList.add("active");
-    await sleep(BATTLE_INTRO_MS);
+    await waitSkippableMs(BATTLE_INTRO_MS);
     $battleIntroOverlay.classList.remove("active");
   }
 
@@ -1487,20 +1611,174 @@ async function storyBg(from, to, ms) {
 }
 
 // 通用黑幕文字消失演出：畫面變暗 → 依序在畫面中心浮現每句文字並漸漸增加透明度直到完全消失 → 畫面亮度回復正常
-async function playStorySequence(lines, darkness = DEFEAT_DARKNESS, restoreBrightness = true) {
+async function playStorySequence(lines, darkness = DEFEAT_DARKNESS, restoreBrightness = true, options = {}) {
+  if (skillExpanded || equipExpanded) {
+    skillExpanded = false;
+    equipExpanded = false;
+    renderStatus();
+  }
   const $s = document.getElementById("story");
+  const $t = $s ? $s.querySelector(".text") : null;
+  if ($t) {
+    $t.classList.toggle("dizzy-stun-text", !!options.dizzy);
+  }
   $s.getAnimations().forEach(a => a.cancel());
   $s.style.backgroundColor = "rgba(0,0,0,0)";
   $s.classList.add("show");
   await storyBg(0, darkness, 500);
+  const lineMs = options.customDuration || STORY_BOSS_LINE_MS;
   for (const line of lines) {
-    await storyTextAnim(line);
+    await storyTextAnim(line, lineMs);
+  }
+  if ($t) {
+    $t.classList.remove("dizzy-stun-text");
   }
   if (restoreBrightness) {
     await storyBg(darkness, 0, 500);
     $s.classList.remove("show");
     $s.getAnimations().forEach(a => a.cancel());
   }
+}
+
+// 第 16.1 版新增：《boss劇情》第七節 — 二階段半血（67 HP）亂碼障壁向下掉落至對話框處並漸隱消失動畫（支援點擊跳過）
+async function playGarbledCoverDropAnim() {
+  const $cover = document.getElementById("enemy-garbled-cover");
+  const $track = document.getElementById("enemy-hp-track");
+  if (!$track || !$fxFlightLayer) {
+    if ($cover) $cover.classList.add("hidden");
+    return;
+  }
+  const tRect = $track.getBoundingClientRect();
+  const dRect = $dialogueStage ? $dialogueStage.getBoundingClientRect() : null;
+  if ($cover) $cover.classList.add("hidden");
+  if (tRect.width <= 0 || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    return;
+  }
+  const targetY = dRect ? dRect.top : (tRect.bottom + 36);
+  const dropDist = Math.max(24, targetY - tRect.bottom);
+  const symbols = ["@", "$", "+", "%", "^", "&", "¥", "#", "?", "!"];
+  const halfWidth = tRect.width * 0.5;
+  const els = [];
+  const anims = [];
+
+  for (let i = 0; i < symbols.length; i++) {
+    const span = document.createElement("div");
+    span.className = "falling-garbled-char";
+    span.textContent = symbols[i];
+    const sx = tRect.left + (halfWidth * (i + 0.5) / symbols.length);
+    const sy = tRect.top + tRect.height * 0.5;
+    span.style.left = sx + "px";
+    span.style.top = sy + "px";
+    $fxFlightLayer.appendChild(span);
+    els.push(span);
+
+    const driftX = (Math.random() - 0.5) * 18;
+    const rot = (Math.random() - 0.5) * 45;
+    const delay = i * 28;
+    const a = span.animate([
+      { transform: "translate(-50%, -50%) translateY(0px) rotate(0deg)", opacity: 1 },
+      { transform: `translate(calc(-50% + ${driftX * 0.5}px), -50%) translateY(${dropDist * 0.55}px) rotate(${rot * 0.5}deg)`, opacity: 0.85, offset: 0.6 },
+      { transform: `translate(calc(-50% + ${driftX}px), -50%) translateY(${dropDist}px) rotate(${rot}deg)`, opacity: 0 },
+    ], { duration: 820, delay, easing: "cubic-bezier(0.32, 0, 0.67, 0)", fill: "forwards" });
+    anims.push(a);
+  }
+
+  await waitSkippableMs(1050);
+  anims.forEach(a => { try { a.cancel(); } catch (e) {} });
+  els.forEach(el => el.remove());
+}
+
+// 第 16.1 版新增：《boss劇情》第七節第 3 點 — 二階段擊敗勝利時，於黑幕中央浮現鮮紅色「文字.沙坦」四個大字，出現裂痕、寸寸崩解化為灰燼消散（支援點擊跳過）
+async function playTrueNameCollapseAnim(trueNameStr = PHASE2_BOSS_TRUE_NAME) {
+  if (skillExpanded || equipExpanded) {
+    skillExpanded = false;
+    equipExpanded = false;
+    renderStatus();
+  }
+  const $s = document.getElementById("story");
+  const $t = $s ? $s.querySelector(".text") : null;
+  if (!$s || !$t) return;
+
+  $s.getAnimations().forEach(a => a.cancel());
+  $s.style.backgroundColor = "rgba(0,0,0,0)";
+  $s.classList.add("show");
+  await storyBg(0, DEFEAT_DARKNESS, 450);
+
+  const chars = Array.from(String(trueNameStr || "文字.沙坦"));
+  $t.style.opacity = "1";
+  $t.innerHTML = `<div class="true-name-collapse-wrap" id="true-name-collapse-wrap"><div class="true-name-collapse-title">${chars.map(c => `<span class="true-name-char">${escapeHtml(c)}</span>`).join("")}</div></div>`;
+
+  const $wrap = document.getElementById("true-name-collapse-wrap");
+  const charEls = Array.from($t.querySelectorAll(".true-name-char"));
+  const ashDots = [];
+
+  await new Promise(resolve => {
+    let finished = false;
+    const timers = [];
+
+    const cleanup = () => {
+      if (finished) return;
+      finished = true;
+      timers.forEach(id => clearTimeout(id));
+      window.removeEventListener("pointerdown", onSkip, true);
+      window.removeEventListener("keydown", onSkip, true);
+      ashDots.forEach(d => d.remove());
+      $t.style.opacity = "0";
+      $t.innerHTML = "";
+      resolve();
+    };
+
+    const onSkip = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      cleanup();
+    };
+
+    window.addEventListener("pointerdown", onSkip, { capture: true, once: true });
+    window.addEventListener("keydown", onSkip, { capture: true, once: true });
+
+    // 階段 1（550ms）：字元出現裂痕並劇烈震顫
+    timers.push(setTimeout(() => {
+      if (finished) return;
+      if ($wrap) $wrap.classList.add("cracking");
+    }, 550));
+
+    // 階段 2（1450ms）：寸寸崩解化為灰燼消散
+    timers.push(setTimeout(() => {
+      if (finished) return;
+      charEls.forEach((el, idx) => {
+        const rect = el.getBoundingClientRect();
+        if ($fxFlightLayer && rect.width > 0) {
+          for (let k = 0; k < 7; k++) {
+            const ash = document.createElement("div");
+            ash.className = "fx-flying-dot";
+            ash.style.setProperty("--dot-color", k % 2 === 0 ? "#ff1744" : "#9ca3af");
+            ash.style.setProperty("--dot-size", (4 + (k % 3) * 2) + "px");
+            const sx = rect.left + rect.width * (0.2 + Math.random() * 0.6);
+            const sy = rect.top + rect.height * (0.2 + Math.random() * 0.6);
+            const dx = (Math.random() - 0.5) * 80;
+            const dy = -25 - Math.random() * 65;
+            ash.style.left = sx + "px";
+            ash.style.top = sy + "px";
+            $fxFlightLayer.appendChild(ash);
+            ashDots.push(ash);
+            ash.animate([
+              { transform: "translate(-50%, -50%) scale(1)", opacity: 0.95 },
+              { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.15)`, opacity: 0 },
+            ], { duration: 1050 + idx * 80, easing: "ease-out", fill: "forwards" });
+          }
+        }
+        el.animate([
+          { opacity: 1, transform: "scale(1) translateY(0px)", filter: "blur(0px)" },
+          { opacity: 0, transform: `scale(0.35) translateY(22px) rotate(${(idx % 2 === 0 ? 1 : -1) * 18}deg)`, filter: "blur(4px)" },
+        ], { duration: 920, delay: idx * 90, easing: "ease-in", fill: "forwards" });
+      });
+    }, 1450));
+
+    timers.push(setTimeout(() => {
+      cleanup();
+    }, 2850));
+  });
 }
 
 async function playStartText() {
@@ -1515,6 +1793,11 @@ async function playStartText() {
 }
 
 async function playDefeatText(customLines) {
+  if (skillExpanded || equipExpanded) {
+    skillExpanded = false;
+    equipExpanded = false;
+    renderStatus();
+  }
   const $s = document.getElementById("story");
   await sleep(DEFEAT_WAIT_MS);
   $s.getAnimations().forEach(a => a.cancel());
@@ -1761,6 +2044,7 @@ function newGame(selectedMode) {
   if ($battleLog) $battleLog.innerHTML = "";
   closeHistoryModal();
   closeTesterModal();
+  closeSkillChoiceModal();
   lastHeroHp = HERO_BASE.hp;
   lastEnemyHp = null;
   lastHeroShield = HERO_BASE.shield;
@@ -1783,6 +2067,8 @@ function newGame(selectedMode) {
     pendingDesperateBreak: false,
     turnBuff: {},
     usedSkillThisTurn: null,
+    trueNameStunActive: false,
+    wordSealCleared: false,
   };
   floor = 1;
   round = 1;
@@ -1796,10 +2082,39 @@ function newGame(selectedMode) {
     ? "【撲克模式】"
     : "【骰子模式】";
   log(`【勇者與魔王】${modeTitle}`, "big");
-  log("你踏入被文字魔王侵蝕的領域。每層共有 6 個回合，擊敗怪物穿戴文字裝備，邁向第五層的原典王座。");
+  log("你踏入被文字魔王侵蝕的領域。每層共有 6 個回合，擊敗怪物穿戴文字裝備，邁向最深處的文字聖殿。");
   const fInfo = getFloorInfo(floor);
   log(`── 進入第 ${floor} 層【${fInfo.name}】：${fInfo.desc}`, "big");
   presentRound();
+}
+
+// 第十六版（v16）：由第 5 層第 6 回合踏入第 6 層【文字聖殿】（純劇情跨層，維持 68 Max HP 平衡）
+async function enterBossSanctuary() {
+  setChoices([]);
+  floor = 6;
+  round = 1;
+  $log.innerHTML = "";
+  renderStatus();
+  const enterLines = (typeof SANCTUARY_ENTER_TEXTS !== "undefined" && SANCTUARY_ENTER_TEXTS.length > 0)
+    ? SANCTUARY_ENTER_TEXTS
+    : [
+        "踏入第六層【文字聖殿】，空氣突然變得無比沉重……",
+        "純白與漆黑的原典文字拱衛著最深處的王座，王座上的鎖鏈寸寸斷裂，文字魔王緩緩抬起頭。",
+      ];
+  for (const line of enterLines) {
+    log(line, "big");
+  }
+  await playStorySequence(enterLines);
+  await bossAppearAnim();
+  setChoices([
+    {
+      label: typeof BOSS_ENGAGE_BTN_TEXT !== "undefined" ? BOSS_ENGAGE_BTN_TEXT : "【魔王】迎戰！",
+      action: () => {
+        turn++;
+        startBattle(BOSS);
+      },
+    },
+  ]);
 }
 
 // 顯示當前樓層與回合的選項（完全不提及牌庫／抽取庫）
@@ -1810,7 +2125,7 @@ function presentRound() {
   const fInfo = getFloorInfo(floor);
   log(`第 ${floor} 層【${fInfo.name}】— 第 ${round} / ${ROUNDS_PER_FLOOR} 回合（總第 ${turn} 回合）。`);
 
-  // 第 6 回合：第 1–4 層為【傳送門 + 寶箱】；第 5 層為【終局魔王戰】
+  // 第 6 回合：第 1–4 層為【傳送門 + 寶箱】；第 5 層第 6 回合為踏入第 6 層【文字聖殿】
   if (round === ROUNDS_PER_FLOOR) {
     if (floor < MAX_FLOOR) {
       log("前方浮現通往下一層的文字傳送門，門前擺放著一個散發微光的跨層寶箱。", "big");
@@ -1824,19 +2139,16 @@ function presentRound() {
         },
       ]);
     } else {
-      log("空氣突然變得沉重……王座上的鎖鏈寸寸斷裂，文字魔王緩緩抬起頭。", "big");
-      setChoices([]);
-      bossAppearAnim().then(() => {
-        setChoices([
-          {
-            label: `【魔王】${BOSS.fullTitle}出現了，無法逃避，迎戰`,
-            action: () => {
-              turn++;
-              startBattle(BOSS);
-            },
+      log("迴廊盡頭矗立著通往第六層【文字聖殿】的巨門，門後散發著令人窒息的原典威壓。", "big");
+      setChoices([
+        {
+          label: typeof SANCTUARY_BTN_TEXT !== "undefined" ? SANCTUARY_BTN_TEXT : "【文字聖殿】踏入文字聖殿",
+          action: () => {
+            turn++;
+            enterBossSanctuary();
           },
-        ]);
-      });
+        },
+      ]);
     }
     return;
   }
@@ -1878,22 +2190,61 @@ function advanceAfterEvent() {
   presentRound();
 }
 
-/* ===== 營地回復（方案 B：營地回復 60% 最大生命） ===== */
-function camp() {
+/* ===== 營地回復（方案 B：營地回復 60% 最大生命 ＋ 第 16.1 版設定 A 肉身文字化侵蝕黑幕過場［選項 3B］） ===== */
+async function camp() {
+  setChoices([]);
   const healTarget = Math.max(1, Math.floor(hero.maxHp * CAMP_HEAL_RATIO));
   const beforeHp = hero.hp;
   hero.hp = Math.min(hero.maxHp, hero.hp + healTarget);
   const healed = hero.hp - beforeHp;
   log(`你在營地生火休息（回復 60% 最大生命）。生命回復 ${healed} 點，現在是 ${hero.hp} / ${hero.maxHp}。`);
   triggerHeroHealVisual(healed);
+
+  const erosionLine = getErosionStoryLine("camp");
+  if (erosionLine) {
+    const cnt = countTextEquipPieces(hero ? hero.equip : null);
+    log(erosionLine, cnt > 0 ? "text-curse" : "hit");
+    await playStorySequence([erosionLine]);
+  }
   setChoices([{ label: "繼續前進", action: advanceAfterEvent }]);
 }
 
-/* ===== 第十一版（v11）新增：樓層技能牌「三選一」抽取、滿槽替換與放棄無補償機制 ===== */
-function triggerSkillCardEvent() {
+/* ===== 第十一版／第 16.1 版升級：樓層技能牌「戰技殘頁」前代勇者字跡過場 ＋ 黑幕中央 3 長方框選技介面（設定 C・選項 5A） ===== */
+function ensureSkillChoiceModal() {
+  let $m = document.getElementById("skill-choice-modal");
+  if (!$m) {
+    $m = document.createElement("div");
+    $m.id = "skill-choice-modal";
+    $m.className = "hidden";
+    $m.setAttribute("role", "dialog");
+    $m.setAttribute("aria-modal", "true");
+    document.body.appendChild($m);
+  }
+  return $m;
+}
+
+function closeSkillChoiceModal() {
+  const $m = document.getElementById("skill-choice-modal");
+  if ($m) {
+    $m.classList.add("hidden");
+    $m.innerHTML = "";
+  }
+}
+
+async function triggerSkillCardEvent() {
+  setChoices([]);
   const ownedIds = new Set((hero.skills || []).map(s => s.id));
   const unownedPool = SKILLS.filter(s => !ownedIds.has(s.id));
   const candidates = drawFromDeck(unownedPool, SKILL_DRAW_COUNT);
+
+  // 1. 依當前樓層播放前代勇者字跡眉批（黑幕文字消失效果，可點擊跳過）
+  const loreLine = (typeof SKILL_PAGE_LORE_BY_FLOOR !== "undefined" && SKILL_PAGE_LORE_BY_FLOOR[floor])
+    ? SKILL_PAGE_LORE_BY_FLOOR[floor]
+    : "";
+  if (loreLine) {
+    log(loreLine, "text-curse");
+    await playStorySequence([loreLine]);
+  }
 
   log("你在斷壁殘垣間發現了前人遺留的「戰技殘頁」，上面浮現出三道截然不同的戰技刻印：", "big");
   candidates.forEach((sk, idx) => {
@@ -1907,21 +2258,54 @@ function triggerSkillCardEvent() {
   }
   renderStatus();
 
+  // 2. 背景變暗，畫面中心顯示 3 個長方框（內含三個技能詳細描述，點擊長方框直接選擇），下方附「不選擇技能」按鈕
   const renderCandidateChoices = () => {
-    const choiceList = candidates.map(sk => ({
-      label: `領悟【${sk.name}】（${sk.categoryLabel}｜冷卻 ${sk.cd} 回合）`,
-      btnClass: getSkillCategoryBtnClass(sk.category),
-      rippleColor: getSkillColorByCategory(sk.category),
-      action: () => onPickSkillCandidate(sk, renderCandidateChoices),
-    }));
-    choiceList.push({
-      label: "放棄，不學習新技能（直接繼續前進）",
-      action: () => {
+    setChoices([]);
+    const $modal = ensureSkillChoiceModal();
+    const curInfo = (hero.skills && hero.skills.length > 0)
+      ? `目前裝備技能（${hero.skills.length} / ${MAX_EQUIPPED_SKILLS}）：${hero.skills.map(s => `【${s.name}】`).join("、")}`
+      : `目前裝備技能（0 / ${MAX_EQUIPPED_SKILLS}）：尚未裝備任何技能`;
+
+    const cardsHtml = candidates.map((sk, idx) => {
+      const actionTag = sk.skipAttack ? "跳過普通攻擊" : "不跳過普通攻擊";
+      return `
+        <button type="button" class="skill-choice-rect cat-${sk.category}" data-cand-idx="${idx}">
+          <div class="rect-top">
+            <span class="rect-name">【${escapeHtml(sk.name)}】</span>
+            <span class="skill-cat-badge cat-${sk.category}">${escapeHtml(sk.categoryLabel)}｜冷卻 ${sk.cd} 回合｜${actionTag}</span>
+          </div>
+          <div class="rect-desc">${escapeHtml(sk.desc)}</div>
+        </button>`;
+    }).join("");
+
+    $modal.innerHTML = `
+      <div class="skill-choice-container">
+        <div class="skill-choice-header">【戰技殘頁】請點擊選擇要領悟的技能</div>
+        <div class="skill-choice-sub">${escapeHtml(curInfo)}</div>
+        <div class="skill-choice-cards">${cardsHtml}</div>
+        <button type="button" class="skill-choice-skip-btn" id="btn-skip-skill-choice">不選擇技能</button>
+      </div>`;
+    $modal.classList.remove("hidden");
+
+    $modal.querySelectorAll(".skill-choice-rect").forEach(btn => {
+      btn.onclick = () => {
+        const idx = parseInt(btn.dataset.candIdx, 10);
+        const picked = candidates[idx];
+        if (!picked) return;
+        playSkillButtonEnergyRipple(btn, getSkillColorByCategory(picked.category));
+        closeSkillChoiceModal();
+        onPickSkillCandidate(picked, renderCandidateChoices);
+      };
+    });
+
+    const $skipBtn = document.getElementById("btn-skip-skill-choice");
+    if ($skipBtn) {
+      $skipBtn.onclick = () => {
+        closeSkillChoiceModal();
         log("你合上戰技殘頁，未領悟新技能，繼續踏上旅途。");
         advanceAfterEvent();
-      },
-    });
-    setChoices(choiceList);
+      };
+    }
   };
 
   renderCandidateChoices();
@@ -2006,9 +2390,9 @@ async function triggerPortalChestFlow() {
           await playEquipTextAnim(match[1]);
         }
 
-        // 5. 播放傳送門全螢幕文字動畫（延長至 3.0 秒，變暗＋黃字淡出＋白色掃描線雙重閃爍）
+        // 5. 播放傳送門全螢幕文字動畫（延長至 3.0 秒，變暗＋黃字淡出＋白色掃描線雙重閃爍，支援點擊跳過）
         await playFadeOutTextScreen("踏入扭曲的原典傳送門...", "#ffd23f", true, 3000);
-        enterNextFloorPortal();
+        await enterNextFloorPortal();
       }
     },
     {
@@ -2016,15 +2400,20 @@ async function triggerPortalChestFlow() {
       action: async () => {
         setChoices([]);
         log(`你放棄了 ${item.name}。`);
-        // 放棄更換時直接播放傳送門動畫（3.0 秒）
+        // 放棄更換時直接播放傳送門動畫（3.0 秒，支援點擊跳過）
         await playFadeOutTextScreen("踏入扭曲的原典傳送門...", "#ffd23f", true, 3000);
-        enterNextFloorPortal();
+        await enterNextFloorPortal();
       }
     }
   ]);
 }
 
-function enterNextFloorPortal() {
+async function enterNextFloorPortal() {
+  const portalErosionLine = getErosionStoryLine("portal");
+  if (portalErosionLine) {
+    await playStorySequence([portalErosionLine]);
+  }
+
   floor++;
   round = 1;
   floorDeck = buildFloorDeck(floor);
@@ -2036,6 +2425,10 @@ function enterNextFloorPortal() {
 
   // 每層清空一次一般對話框（歷史紀錄仍完整保留於 historyLogs）
   $log.innerHTML = "";
+  if (portalErosionLine) {
+    const cnt = countTextEquipPieces(hero ? hero.equip : null);
+    log(portalErosionLine, cnt > 0 ? "text-curse" : "hit");
+  }
   log(`你踏入傳送門，成功抵達第 ${floor} 層【${fInfo.name}】！`, "big");
   log(`跨層祝福發動：勇者最大生命 +${FLOOR_HP_BONUS}，並回復 ${FLOOR_HP_BONUS} 點生命（目前生命 ${hero.hp} / ${hero.maxHp}）。`, "hit");
   log(`── 進入第 ${floor} 層【${fInfo.name}】：${fInfo.desc}`, "big");
@@ -2201,6 +2594,22 @@ async function beginHeroTurn() {
   }
 
   renderStatus();
+
+  // 第 16.1 版新增：《boss劇情》第七節第 2 點 — 沙坦露出真名後附加勇者 30% 眩暈 Debuff（「勇者感覺天旋地轉，暫時喪失行動力」，搭配眩暈放大縮小搖動效果）
+  if (enemy && enemy.isPhase2Boss && hero.trueNameStunActive) {
+    const stunChance = (typeof HERO_TRUE_NAME_STUN_CHANCE !== "undefined") ? HERO_TRUE_NAME_STUN_CHANCE : 0.30;
+    if (Math.random() < stunChance) {
+      setChoices([]);
+      const stunLine = (typeof HERO_TRUE_NAME_STUN_TEXT !== "undefined")
+        ? HERO_TRUE_NAME_STUN_TEXT
+        : "勇者感覺天旋地轉，暫時喪失行動力";
+      log(`【精神污染】${stunLine}！`, "text-curse");
+      await playStorySequence([stunLine], DEFEAT_DARKNESS, true, { dizzy: true });
+      await finishHeroTurnAndEnemyAct(false);
+      return;
+    }
+  }
+
   showCombatButtons();
 }
 
@@ -2394,7 +2803,14 @@ async function useCombatSkill(sk) {
     const slashP = enemyPanelSlashAnim("slash-x-red");
     await sleep(110);
     enemy.shield -= shdBroken;
-    enemy.hp -= hpDmg;
+    const lockHp = (typeof PHASE2_BOSS_HALF_HP_LOCK !== "undefined") ? PHASE2_BOSS_HALF_HP_LOCK : 67;
+    let lockedByBarrier = false;
+    if (enemy.isPhase2Boss && !enemy.halfHpTriggered && (enemy.hp - hpDmg) < lockHp) {
+      enemy.hp = lockHp;
+      lockedByBarrier = true;
+    } else {
+      enemy.hp -= hpDmg;
+    }
     const enemyLostHp = enemy.hp < enemyHpBefore;
     let enemyShieldState = "none";
     if (enemyShieldBefore > 0 && enemy.shield === 0 && shdBroken > 0) {
@@ -2406,7 +2822,8 @@ async function useCombatSkill(sk) {
     const parts = [];
     if (shdBroken > 0) parts.push(`護盾 −${shdBroken}`);
     if (hpDmg > 0) parts.push(`生命 −${hpDmg}`);
-    const mainLine = `勇者施放【破盾斬】［必中｜雙倍破盾］ ➔ 造成 ${shdBroken + hpDmg} 點破障重擊！（${parts.join("，") || "0 傷害"}）`;
+    const lockSuffix = lockedByBarrier ? `；亂碼障壁鎖血 ${lockHp}，溢出傷害被吸收` : "";
+    const mainLine = `勇者施放【破盾斬】［必中｜雙倍破盾］ ➔ 造成 ${shdBroken + hpDmg} 點破障重擊！（${parts.join("，") || "0 傷害"}${lockSuffix}）`;
     const formulaLine = `基礎值 ${baseDmg}（較高攻 ${highAtk} × 1.4）➔ 破盾消耗 ${baseUsed}（雙倍擊碎 ${shdBroken} 盾），剩餘 ${hpDmg} 直扣生命`;
     logCombatReport(true, mainLine, formulaLine);
     if (hero.chargeBuffs && hero.chargeBuffs.length > 0) {
@@ -2430,9 +2847,17 @@ async function useCombatSkill(sk) {
     const trueDmg = Math.floor(calcCost * 2.5 + highAtk * 0.6);
     const slashP = enemyPanelSlashAnim("slash-x-red");
     await sleep(110);
-    enemy.hp -= trueDmg;
+    const lockHp = (typeof PHASE2_BOSS_HALF_HP_LOCK !== "undefined") ? PHASE2_BOSS_HALF_HP_LOCK : 67;
+    let lockedByBarrier = false;
+    if (enemy.isPhase2Boss && !enemy.halfHpTriggered && (enemy.hp - trueDmg) < lockHp) {
+      enemy.hp = lockHp;
+      lockedByBarrier = true;
+    } else {
+      enemy.hp -= trueDmg;
+    }
     renderStatus();
-    const mainLine = `勇者施放【捨身決絕】［消耗 ${actualCost} 點生命｜真實傷害］ ➔ 造成 ${trueDmg} 點真實傷害！（生命 −${trueDmg}）`;
+    const lockSuffix = lockedByBarrier ? `，亂碼障壁鎖血 ${lockHp}` : "";
+    const mainLine = `勇者施放【捨身決絕】［消耗 ${actualCost} 點生命｜真實傷害］ ➔ 造成 ${trueDmg} 點真實傷害！（生命 −${trueDmg}${lockSuffix}）`;
     const formulaLine = `消耗生命 ${calcCost} × 2.5 + 較高攻 ${highAtk} × 60% = ${trueDmg} 無視防盾真實傷害`;
     logCombatReport(true, mainLine, formulaLine);
     if (hero.chargeBuffs && hero.chargeBuffs.length > 0) {
@@ -2641,6 +3066,7 @@ async function startBattle(template) {
   hero.turnBuff = {};
   hero.usedSkillThisTurn = null;
   hero.justReadySkills = {};
+  hero.trueNameStunActive = false;
   lastRenderedBuffKeys = new Set();
   if ($dialogueStage) {
     $dialogueStage.classList.remove("crystal-wall-active", "charge-dmg-reduce-active");
@@ -2672,9 +3098,23 @@ async function startBattle(template) {
   log(`對手是${enemy.name}！`, "big");
 
   if (enemy.isBoss) {
-    log("魔王的力量有點奇怪，似乎不屬於這裏……", "text-curse");
+    const introLine = typeof BOSS_INTRO_TEXT !== "undefined"
+      ? BOSS_INTRO_TEXT
+      : "勇者握緊武器，隱約察覺到魔王身上的劍氣與力量有些古怪，似乎根本不屬於這個冰冷的文字世界……";
+    log(introLine, "text-curse");
+    await playStorySequence([introLine]);
   } else if (enemy.isPhase2Boss) {
-    log(`【精神世界】${enemy.name}完全複製了你身上的文字裝備與基礎能力（不包含飾品【勇者之劍】與局內技能），並發動【亂碼侵蝕】（攻擊×${PHASE2_BOSS_INIT_MULT}／命中吸取 ${PHASE2_BOSS_LIFESTEAL} 點生命）！`, "text-curse");
+    const p2IntroLines = (typeof PHASE2_INTRO_TEXTS !== "undefined" && PHASE2_INTRO_TEXTS.length > 0)
+      ? PHASE2_INTRO_TEXTS
+      : [
+          "意識墜入精神世界，@$+%^&¥在黑暗中凝聚成形，完全複製了勇者身上的文字武裝！",
+          "@$+%^&¥：「這裏是你的意識深處，你一路以來所依賴的文字力量全都屬於我——現在，把你的身體交出來吧！」",
+        ];
+    for (const line of p2IntroLines) {
+      log(line, "text-curse");
+    }
+    log(`【精神世界】${enemy.name}完全複製了你身上的文字裝備與基礎能力（不包含飾品【勇者之劍】與局內技能），外層覆蓋著無法被秒殺的【亂碼障壁】（鎖血門檻 ${PHASE2_BOSS_HALF_HP_LOCK} 點）並發動【亂碼侵蝕】（攻擊×${PHASE2_BOSS_INIT_MULT}）！`, "text-curse");
+    await playStorySequence(p2IntroLines);
   }
 
   if (enemy.type === "chaos" && !enemy.isPhase2Boss) {
@@ -2995,6 +3435,11 @@ async function heroAttack(atkType) {
     ignoreHalfShield,
     extraTags,
   });
+  const lockHp = (typeof PHASE2_BOSS_HALF_HP_LOCK !== "undefined") ? PHASE2_BOSS_HALF_HP_LOCK : 67;
+  if (enemy.isPhase2Boss && !enemy.halfHpTriggered && heroTarget.hp < lockHp) {
+    heroTarget.hp = lockHp;
+    report.mainLine += `（亂碼障壁鎖血 ${lockHp}，溢出傷害被吸收！）`;
+  }
   // 嚴格計算敵人「實際減少的生命值（不含溢出傷害 Overkill）」，供【文字汲取】與【文字汲盾】使用
   const actualEnemyHpLost = Math.max(0, enemyHpBefore - Math.max(0, heroTarget.hp));
   const enemyLostHp = actualEnemyHpLost > 0;
@@ -3137,18 +3582,27 @@ async function heroAttack(atkType) {
 async function finishHeroTurnAndEnemyAct(didAttackAction) {
   if (!enemy) return;
 
-  // 二階段：勇者第一次攻擊後的專屬台詞（半血前 enemy.name 為 @$+%^&¥，完全不出現真魔王或沙坦）
+  // 二階段：勇者第一次攻擊出手後的專屬劇情（文字消失效果 ＋ 同步寫入戰鬥對話框）
   if (didAttackAction && enemy.isPhase2Boss && !enemy.firstAttackDone) {
     enemy.firstAttackDone = true;
-    log(`${enemy.name}：「啊啊你爲甚麼會有前勇者的武器，這個混蛋竟然死後也不安寧！！！」`, "text-curse");
+    const firstStrikeLine = typeof PHASE2_FIRST_STRIKE_TEXT !== "undefined"
+      ? PHASE2_FIRST_STRIKE_TEXT
+      : `${enemy.name}：「甚麼？！那把沒有文字化的舊劍裡，竟然還藏著前勇者那混蛋的殘魂？！死後竟敢還來礙事！！！」`;
+    log(firstStrikeLine, "text-curse");
+    await playStorySequence([firstStrikeLine]);
   }
 
   if (enemy.hp <= 0) { await winBattle(); return; }
 
-  // 結算敵方身上的【燃燒】持續傷害（第十二版 v12：每回合結束自動扣除目標當前剩餘生命值的 1/5 真實傷害）
+  // 結算敵方身上的【燃燒】持續傷害（第十二版 v12：每回合結束自動扣除目標當前剩餘生命值的 1/5 真實傷害；二階段未露真名前受 67 點鎖血保護）
   if (enemy.burnTurns && enemy.burnTurns > 0 && enemy.hp > 0) {
     const burnDmg = Math.max(1, Math.floor(enemy.hp / 5));
-    enemy.hp = Math.max(0, enemy.hp - burnDmg);
+    const lockHp = (typeof PHASE2_BOSS_HALF_HP_LOCK !== "undefined") ? PHASE2_BOSS_HALF_HP_LOCK : 67;
+    if (enemy.isPhase2Boss && !enemy.halfHpTriggered && (enemy.hp - burnDmg) < lockHp) {
+      enemy.hp = lockHp;
+    } else {
+      enemy.hp = Math.max(0, enemy.hp - burnDmg);
+    }
     enemy.burnTurns--;
     renderStatus();
     log(`【燃燒】字元烈焰持續灼燒${enemy.name}（扣除 1/5 當前生命），造成 ${burnDmg} 點真實傷害（剩餘持續 ${enemy.burnTurns} 回合）！`, "hit");
@@ -3157,19 +3611,21 @@ async function finishHeroTurnAndEnemyAct(didAttackAction) {
     if (enemy.hp <= 0) { await winBattle(); return; }
   }
 
-  // 一階段魔王半血掙扎加劇提示
+  // 一階段魔王半血掙扎加劇（首次進入半血時保底於緊接之敵方回合觸發意識掙扎演出，並將後續每回合機率提升至 30%）
   if (enemy.isBoss && !enemy.halfHpTriggered && enemy.hp <= enemy.maxHp * BOSS_STRUGGLE_HP_RATIO) {
     enemy.halfHpTriggered = true;
-    log(BOSS_STRUGGLE_TEXT, "text-curse");
+    enemy.forceNextStruggle = true;
   }
 
-  // 二階段半血（HP <= 67）顯露真名「文字.沙坦」並進入狂暴狀態
-  if (enemy.isPhase2Boss && !enemy.halfHpTriggered && enemy.hp <= enemy.maxHp * PHASE2_BOSS_RAGE_HP_RATIO) {
+  // 二階段半血（HP <= 67）斬碎亂碼障壁、亂碼遮罩向下掉落消失、揭露真名「文字.沙坦」、進入狂暴狀態並為勇者附加 30% 眩暈精神污染
+  const halfLockVal = (typeof PHASE2_BOSS_HALF_HP_LOCK !== "undefined") ? PHASE2_BOSS_HALF_HP_LOCK : Math.floor(enemy.maxHp * PHASE2_BOSS_RAGE_HP_RATIO);
+  if (enemy.isPhase2Boss && !enemy.halfHpTriggered && enemy.hp <= halfLockVal) {
     enemy.halfHpTriggered = true;
-    const oldHiddenName = enemy.name;
+    await playGarbledCoverDropAnim();
     enemy.name = enemy.trueName || PHASE2_BOSS_TRUE_NAME;
     enemy.typeLabel = "真魔王";
     enemy.inRage = true;
+    hero.trueNameStunActive = true;
     enemy.physAtk = Math.floor(enemy.baseMirrorPhysAtk * PHASE2_BOSS_RAGE_MULT);
     enemy.magAtk = Math.floor(enemy.baseMirrorMagAtk * PHASE2_BOSS_RAGE_MULT);
     enemy.shield += PHASE2_BOSS_RAGE_SHIELD;
@@ -3177,11 +3633,25 @@ async function finishHeroTurnAndEnemyAct(didAttackAction) {
     if ($battleDrawerTitle) {
       $battleDrawerTitle.innerHTML = colorize(`與 ${escapeHtml(enemy.name)} 的戰鬥`);
     }
-    log(`【真名顯露】隨着重創，${oldHiddenName}身上的亂碼屏障碎裂，露出了它的真名——「${enemy.name}」！`, "big");
-    log(`勇者：「原來魔王的名字叫${enemy.name}….」`, "hit");
-    log(`${enemy.name}：「竟然被你看見了...那麼你就非死不可了！！」`, "text-curse");
-    log(`【狂暴】${enemy.name}進入狂暴狀態！物理與魔法攻擊力提升為 ${PHASE2_BOSS_RAGE_MULT} 倍（物攻 ${enemy.physAtk}／魔攻 ${enemy.magAtk}），並重鑄了 ${PHASE2_BOSS_RAGE_SHIELD} 點原典黑盾！`, "text-curse");
+    const halfHpLines = (typeof PHASE2_HALF_HP_TEXTS !== "undefined" && PHASE2_HALF_HP_TEXTS.length > 0)
+      ? PHASE2_HALF_HP_TEXTS
+      : [
+          "致命的劍光斬在@$+%^&¥身上，卻被一層扭曲的亂碼屏障硬生生擋在半途——只要它的真名還隱藏在亂碼之下，世上就沒有任何力量能將它徹底抹殺！",
+          "剎那間，【勇者之劍】中的殘魂與勇者的意志產生共鳴，金光硬生生撕裂了外層的亂碼屏障，扯出了刻在核心上的血紅真名——「文字.沙坦」！",
+          "勇者看著那四個字元，心中瞬間明瞭：在文字構築的世界裡，一旦看穿了它的真名「文字.沙坦」，它就不再是無形的詛咒，而是能夠被一劍抹除的文字！",
+          "文字.沙坦：「竟然被你看見了我的真名……那麼你就非死不可了！！」",
+          "文字.沙坦徹底撕下偽裝進入狂暴狀態，周身湧起漆黑的原典黑盾，殺意暴漲！",
+        ];
+    halfHpLines.forEach((line, idx) => {
+      log(line, idx < 2 ? "big" : (idx === 2 ? "hit" : "text-curse"));
+    });
+    log(`【狂暴】${enemy.name}物理與魔法攻擊力提升為 ${PHASE2_BOSS_RAGE_MULT} 倍（物攻 ${enemy.physAtk}／魔攻 ${enemy.magAtk}），重鑄了 ${PHASE2_BOSS_RAGE_SHIELD} 點原典黑盾，且真名精神污染使勇者每回合有 30% 機率陷入天旋地轉！`, "text-curse");
     renderStatus();
+    const $eTitleEl = document.getElementById("enemy-panel-title");
+    if ($eTitleEl) {
+      replayClass($eTitleEl, "true-name-shatter-reveal");
+    }
+    await playStorySequence(halfHpLines);
   }
 
   // 完整冷卻間隔回合制：遞減「非本回合剛施放」之技能冷卻時間（若由 1 歸 0 則標記下回合微光提醒）
@@ -3238,25 +3708,32 @@ async function consumeEndOfTurnHeroBuffs() {
 }
 
 async function enemyAttack() {
-  // 一階段魔王掙扎判定（初期 15%，半血以下 30%）
+  // 一階段魔王掙扎判定（初期 15%，半血以下 30%，首次達半血保底觸發；隨機 4 句求救低語＋結果 A/B 文字消失效果）
   let berserkBonus = 0;
   if (enemy.isBoss) {
     const struggleChance = (enemy.hp <= enemy.maxHp * BOSS_STRUGGLE_HP_RATIO)
       ? BOSS_STRUGGLE_CHANCE_LOW_HP
       : BOSS_STRUGGLE_CHANCE_BASE;
-    if (Math.random() < struggleChance) {
-      log(BOSS_STRUGGLE_TEXT, "text-curse");
+    const shouldStruggle = enemy.forceNextStruggle || (Math.random() < struggleChance);
+    enemy.forceNextStruggle = false;
+    if (shouldStruggle) {
+      const whisperPool = (typeof BOSS_STRUGGLE_WHISPERS !== "undefined" && BOSS_STRUGGLE_WHISPERS.length > 0)
+        ? BOSS_STRUGGLE_WHISPERS
+        : [BOSS_STRUGGLE_TEXT];
+      const whisperLine = randomPick(whisperPool);
+      log(whisperLine, "text-curse");
       if (Math.random() < 0.5) {
         enemy.hp = Math.max(0, enemy.hp - BOSS_STRUGGLE_SELF_DMG);
-        log(BOSS_STRUGGLE_SELF_HIT_TEXT, "text-curse");
+        log(`${BOSS_STRUGGLE_SELF_HIT_TEXT}（${enemy.name}生命 −${BOSS_STRUGGLE_SELF_DMG}，目前生命 ${enemy.hp} / ${enemy.maxHp}）`, "text-curse");
         renderStatus();
-        await sleep(HIT_MS);
+        await playStorySequence([whisperLine, BOSS_STRUGGLE_SELF_HIT_TEXT]);
         await consumeEndOfTurnHeroBuffs();
         if (enemy.hp <= 0) await winBattle();
         return;
       } else {
         berserkBonus = BOSS_STRUGGLE_BERSERK_ATK;
-        log(BOSS_STRUGGLE_BERSERK_TEXT, "text-curse");
+        log(`${BOSS_STRUGGLE_BERSERK_TEXT}（本回合${enemy.name}攻擊力臨時 +${BOSS_STRUGGLE_BERSERK_ATK}！）`, "text-curse");
+        await playStorySequence([whisperLine, BOSS_STRUGGLE_BERSERK_TEXT]);
       }
     }
   }
@@ -3322,16 +3799,33 @@ async function enemyAttack() {
     await heroHitAnim(false);
     await consumeEndOfTurnHeroBuffs();
 
-    // 畫面變暗並在中心顯示文字消失效果
+    // 畫面變暗並在中心顯示文字消失效果（同步寫入戰鬥對話框；第 2 次擋死依魔王當下名稱動態防劇透）
     if (acc.blocksLeft > 0) {
-      log(`勇者之劍裏的殘魂突然出現，爲勇者擋下了致命一擊並重鑄護盾！勇者的殘魂變弱了一分（攻擊倍率降至 ×${acc.atkMult}，勇者保留 1 點生命）。`, "hit");
+      const b1Lines = (typeof HERO_SWORD_BLOCK1_TEXTS !== "undefined" && HERO_SWORD_BLOCK1_TEXTS.length > 0)
+        ? HERO_SWORD_BLOCK1_TEXTS
+        : [HERO_SWORD_BLOCK_TEXT];
+      for (const line of b1Lines) {
+        log(line, "hit");
+      }
+      log(`（【勇者之劍】攻擊倍率降至 ×${acc.atkMult}，勇者保留 1 點生命並重鑄滿額護盾）`, "hit");
       renderStatus();
-      await playStorySequence([HERO_SWORD_BLOCK_TEXT]);
+      await playStorySequence(b1Lines);
     } else {
-      log(`勇者之劍裏的殘魂拼盡最後一份力爲勇者擋下致命一擊並重鑄護盾！勇者的殘魂消失了...（攻擊倍率降至 ×${acc.atkMult}，勇者保留 1 點生命）`, "hit");
-      log(`${enemy.name}：「（邪笑）看你還有甚麼手段抵擋我」`, "text-curse");
+      const baseB2 = (typeof HERO_SWORD_BLOCK2_TEXTS !== "undefined" && HERO_SWORD_BLOCK2_TEXTS.length > 0)
+        ? HERO_SWORD_BLOCK2_TEXTS
+        : [HERO_SWORD_BLOCK_TEXT, HERO_SWORD_VANISH_TEXT];
+      const tauntSuffix = typeof HERO_SWORD_BLOCK2_TAUNT_SUFFIX !== "undefined"
+        ? HERO_SWORD_BLOCK2_TAUNT_SUFFIX
+        : "：「那礙事的亡魂終於徹底消散了，看你這具殘破的血肉還有甚麼手段抵擋我！」";
+      const tauntLine = `${enemy.name}${tauntSuffix}`;
+      const b2Lines = [...baseB2, tauntLine];
+      for (const line of baseB2) {
+        log(line, "hit");
+      }
+      log(`（【勇者之劍】攻擊倍率降至 ×${acc.atkMult}，勇者保留 1 點生命並重鑄滿額護盾）`, "hit");
+      log(tauntLine, "text-curse");
       renderStatus();
-      await playStorySequence([HERO_SWORD_BLOCK_TEXT, HERO_SWORD_VANISH_TEXT]);
+      await playStorySequence(b2Lines);
     }
     return;
   }
@@ -3395,7 +3889,12 @@ async function enemyAttack() {
       heroHitAnim(heroLostHp, heroShieldState),
       playReflectWaveAnim(async () => {
         enemy.shield -= eShdHit;
-        enemy.hp -= eHpHit;
+        const lockHp = (typeof PHASE2_BOSS_HALF_HP_LOCK !== "undefined") ? PHASE2_BOSS_HALF_HP_LOCK : 67;
+        if (enemy.isPhase2Boss && !enemy.halfHpTriggered && (enemy.hp - eHpHit) < lockHp) {
+          enemy.hp = lockHp;
+        } else {
+          enemy.hp -= eHpHit;
+        }
         renderStatus();
 
         const parts = [];
@@ -3423,6 +3922,34 @@ async function enemyAttack() {
       await winBattle();
       return;
     }
+    // 若反震傷害把二階段魔王打到半血鎖血門檻 67 點，立即觸發半血揭露真名
+    const lockHpCheck = (typeof PHASE2_BOSS_HALF_HP_LOCK !== "undefined") ? PHASE2_BOSS_HALF_HP_LOCK : 67;
+    if (enemy && enemy.isPhase2Boss && !enemy.halfHpTriggered && enemy.hp <= lockHpCheck) {
+      enemy.halfHpTriggered = true;
+      await playGarbledCoverDropAnim();
+      enemy.name = enemy.trueName || PHASE2_BOSS_TRUE_NAME;
+      enemy.typeLabel = "真魔王";
+      enemy.inRage = true;
+      hero.trueNameStunActive = true;
+      enemy.physAtk = Math.floor(enemy.baseMirrorPhysAtk * PHASE2_BOSS_RAGE_MULT);
+      enemy.magAtk = Math.floor(enemy.baseMirrorMagAtk * PHASE2_BOSS_RAGE_MULT);
+      enemy.shield += PHASE2_BOSS_RAGE_SHIELD;
+      enemy.maxShield = Math.max(enemy.maxShield, enemy.shield);
+      if ($battleDrawerTitle) {
+        $battleDrawerTitle.innerHTML = colorize(`與 ${escapeHtml(enemy.name)} 的戰鬥`);
+      }
+      const halfHpLines = (typeof PHASE2_HALF_HP_TEXTS !== "undefined" && PHASE2_HALF_HP_TEXTS.length > 0)
+        ? PHASE2_HALF_HP_TEXTS
+        : [];
+      halfHpLines.forEach((line, idx) => {
+        log(line, idx < 2 ? "big" : (idx === 2 ? "hit" : "text-curse"));
+      });
+      log(`【狂暴】${enemy.name}物理與魔法攻擊力提升為 ${PHASE2_BOSS_RAGE_MULT} 倍（物攻 ${enemy.physAtk}／魔攻 ${enemy.magAtk}），重鑄了 ${PHASE2_BOSS_RAGE_SHIELD} 點原典黑盾，且真名精神污染使勇者每回合有 30% 機率陷入天旋地轉！`, "text-curse");
+      renderStatus();
+      const $eTitleEl = document.getElementById("enemy-panel-title");
+      if ($eTitleEl) replayClass($eTitleEl, "true-name-shatter-reveal");
+      await playStorySequence(halfHpLines);
+    }
     return;
   }
 
@@ -3440,15 +3967,15 @@ async function enemyAttack() {
 async function winBattle() {
   setChoices([]);
 
-  // 一階段魔王被擊敗：收回戰鬥拉簾並進入前勇者真相過場
+  // 一階段魔王被擊敗：收回戰鬥拉簾並進入前代勇者真相過場（第十六版 v16）
   if (enemy.isBoss) {
     await closeBattleDrawerAnim();
     enemy = null;
     renderStatus();
 
-    // 隱藏彩蛋：全程未穿戴任何文字裝備（完全徒手／初始狀態）
+    // 隱藏彩蛋：全程未穿戴任何文字裝備（完全徒手／初始狀態，共 5 句文字消失效果）
     if (isCompletelyUnarmed()) {
-      log("【隱藏彩蛋】你全程沒有借助任何文字裝備的力量，以純粹的血肉之軀擊倒了文字魔王，揭開了他是前勇者的真相！", "big");
+      log("【隱藏彩蛋】你全程沒有借助任何文字裝備的力量，以純粹的血肉之軀擊倒了文字魔王，揭開了他是前代勇者的真相！", "big");
       for (const line of UNARMED_EGG_TEXTS) {
         log(line, "hit");
       }
@@ -3461,7 +3988,7 @@ async function winBattle() {
       return;
     }
 
-    // 正常路線：文字魔王倒下後，勇者發現其身分為「前勇者」，獲得【勇者之劍】
+    // 正常路線：文字魔王倒下後，勇者發現其身分為「前代勇者」，獲得【勇者之劍】（共 8 句文字消失效果）
     const swordItem = { ...HERO_SWORD_ITEM };
     hero.equip.accessory = swordItem;
     const healGain = Math.max(1, Math.floor(hero.maxHp * HERO_SWORD_HEAL_RATIO));
@@ -3472,11 +3999,13 @@ async function winBattle() {
       ? PHASE1_CLEAR_TEXTS
       : (typeof PHASE1_CLEAR_TEXTS_NO_SKILL !== "undefined" ? PHASE1_CLEAR_TEXTS_NO_SKILL : PHASE1_CLEAR_TEXTS);
     sep();
-    log("文字魔王倒下了……他身上的文字枷鎖出現裂痕，露出了底下的真容——竟然是前勇者！", "big");
-    log(`你獲得了前勇者的遺物飾品：【${swordItem.name}】（${swordItem.desc}）！勇者生命回復 ${actualHealed} 點（目前生命 ${hero.hp} / ${hero.maxHp}）！`, "hit");
-    for (const line of clearLines) {
-      log(line, "text-curse");
+    for (let i = 0; i < clearLines.length; i++) {
+      log(clearLines[i], i === 0 ? "big" : "text-curse");
+      if (i === 3) {
+        log(`你獲得了前勇者的遺物飾品：【${swordItem.name}】（${swordItem.desc}）！勇者生命回復 ${actualHealed} 點（目前生命 ${hero.hp} / ${hero.maxHp}）！`, "hit");
+      }
     }
+    renderStatus();
     triggerHeroHealVisual(actualHealed);
 
     await playStorySequence(clearLines);
@@ -3488,16 +4017,23 @@ async function winBattle() {
     return;
   }
 
-  // 二階段（文字.沙坦）被擊敗：收回戰鬥拉簾並演出 4 句勝利結局文字消失動畫
+  // 二階段（文字.沙坦）被擊敗：收回戰鬥拉簾、清空頂部字印徽章、先播放「文字.沙坦」真名裂痕崩解灰燼動畫，再依【勇者之劍】是否仍有剩餘殘魂播放對應勝利結局文字消失動畫
   if (enemy.isPhase2Boss) {
     await closeBattleDrawerAnim();
     enemy = null;
+    hero.trueNameStunActive = false;
+    hero.wordSealCleared = true;
     renderStatus();
     sep();
-    for (const line of PHASE2_VICTORY_TEXTS) {
+    const hasRemainingSoul = !!(hero.equip.accessory && hero.equip.accessory.isHeroSword && hero.equip.accessory.blocksLeft > 0);
+    const victoryLines = (hasRemainingSoul && typeof PHASE2_VICTORY_WITH_SOUL_TEXTS !== "undefined")
+      ? PHASE2_VICTORY_WITH_SOUL_TEXTS
+      : PHASE2_VICTORY_TEXTS;
+    for (const line of victoryLines) {
       log(line, "big");
     }
-    await playStorySequence(PHASE2_VICTORY_TEXTS);
+    await playTrueNameCollapseAnim(PHASE2_BOSS_TRUE_NAME);
+    await playStorySequence(victoryLines);
     log(`【勝利結局：血肉重鑄】你成功擊潰真魔王「${PHASE2_BOSS_TRUE_NAME}」，奪回血肉之身並拯救了村落！`, "big");
     setChoices([
       { label: "再玩一次", action: showReplayModeChoices },
@@ -3541,18 +4077,45 @@ async function winBattle() {
 function loseGame() {
   gameOver = true;
   hero.hp = 0;
-  const wasPhase2 = enemy && enemy.isPhase2Boss;
+  const wasPhase2 = !!(enemy && enemy.isPhase2Boss);
+  const wasPhase1Boss = !!(enemy && enemy.isBoss);
   const killerName = enemy ? enemy.name : "魔王";
-  log(`勇者倒下了……被${killerName}擊敗，意識逐漸被冰冷的文字吞噬。`, "big");
   if (wasPhase2) {
+    const p2DefeatLines = PHASE2_DEFEAT_TEXTS.map((line, idx) =>
+      (idx === 0 && killerName !== PHASE2_BOSS_TRUE_NAME)
+        ? line.replace(PHASE2_BOSS_TRUE_NAME, killerName)
+        : line
+    );
+    for (const line of p2DefeatLines) {
+      log(line, "text-curse");
+    }
     log("【敗北結局：文字魔王】你的意識被徹底吞噬，肉身化為冰冷文字，成為王座上靜候下一位挑戰者的新任文字魔王……", "text-curse");
-  } else {
-    log(`【遊戲結束】止步於第 ${floor} 層第 ${round} 回合。`, "big");
+    enemy = null;
+    renderStatus();
+    setChoices([]);
+    playDefeatText(p2DefeatLines);
+    return;
   }
+  if (wasPhase1Boss) {
+    const p1DefeatLines = (typeof PHASE1_DEFEAT_TEXTS !== "undefined" && PHASE1_DEFEAT_TEXTS.length > 0)
+      ? PHASE1_DEFEAT_TEXTS
+      : [`勇者倒下了……被${killerName}擊敗，意識逐漸被冰冷的文字吞噬。而魔王坐回了他的王座，平靜得像甚麼也沒發生過.....`];
+    for (const line of p1DefeatLines) {
+      log(line, "text-curse");
+    }
+    log("【遊戲結束】止步於第 6 層【文字聖殿】。", "big");
+    enemy = null;
+    renderStatus();
+    setChoices([]);
+    playDefeatText(p1DefeatLines);
+    return;
+  }
+  log(`勇者倒下了……被${killerName}擊敗，意識逐漸被冰冷的文字吞噬。`, "big");
+  log(`【遊戲結束】止步於第 ${floor} 層第 ${round} 回合。`, "big");
   enemy = null;
   renderStatus();
   setChoices([]);
-  playDefeatText(wasPhase2 ? PHASE2_DEFEAT_TEXTS : [DEFEAT_TEXT]);
+  playDefeatText([DEFEAT_TEXT]);
 }
 
 /* =========================================================
